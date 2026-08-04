@@ -1,37 +1,14 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import {
+  ProductCategory,
+  ProductCondition,
   QuoteStatus,
   DiscountType,
+  IQuoteItem,
   ICustomer,
-  ProductCondition,
-  IProductSpecs,
 } from '../types';
 
-export interface IQuoteItemSnapshot {
-  name: string;
-  productCode: string;
-  condition: ProductCondition;
-  costPrice: number;
-  specs: IProductSpecs;
-  imageUrl?: string;
-  serialNumber?: string;
-}
-
-export interface IQuoteItemDocument {
-  inventoryItem: mongoose.Types.ObjectId;
-  productSnapshot: IQuoteItemSnapshot;
-  unitPrice: number;
-  quantity: number;
-  discount: number;
-  discountType: DiscountType;
-  warranty: string;
-  serialNumber?: string;
-  total: number;
-  order: number;
-}
-
 export interface IQuoteDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   quoteCode: string;
   invoiceId?: mongoose.Types.ObjectId;
   invoiceCode?: string;
@@ -39,7 +16,7 @@ export interface IQuoteDocument extends Document {
   createdDate: Date;
   createdBy: string;
   customer: ICustomer;
-  items: IQuoteItemDocument[];
+  items: IQuoteItem[];
   subtotal: number;
   discount: number;
   discountType: DiscountType;
@@ -51,56 +28,16 @@ export interface IQuoteDocument extends Document {
   totalCost: number;
   profit: number;
   status: QuoteStatus;
-  showConditionInPdf?: boolean;
+  showConditionInPdf: boolean;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const quoteItemSnapshotSchema = new Schema<IQuoteItemSnapshot>(
+const quoteItemSchema = new Schema<IQuoteItem>(
   {
-    name: { type: String, required: true },
-    productCode: { type: String, required: true },
-    condition: { type: String, required: true },
-    costPrice: { type: Number, default: 0 },
-    specs: {
-      type: new Schema<IProductSpecs>(
-        {
-          cpu: String,
-          mainboard: String,
-          ram: String,
-          ssd: String,
-          hdd: String,
-          vga: String,
-          psu: String,
-          case: String,
-          cooler: String,
-          windows: String,
-          office: String,
-          accessories: String,
-          notes: String,
-        },
-        { _id: false }
-      ),
-      default: () => ({}),
-    },
-    imageUrl: String,
-    serialNumber: String,
-  },
-  { _id: false }
-);
-
-const quoteItemSchema = new Schema<IQuoteItemDocument>(
-  {
-    inventoryItem: {
-      type: Schema.Types.ObjectId,
-      ref: 'Inventory',
-      required: true,
-    },
-    productSnapshot: {
-      type: quoteItemSnapshotSchema,
-      required: true,
-    },
+    inventoryItem: Schema.Types.Mixed,
+    productSnapshot: Schema.Types.Mixed,
     unitPrice: {
       type: Number,
       required: true,
@@ -153,14 +90,10 @@ const customerSchema = new Schema<ICustomer>(
 
 const quoteSchema = new Schema<IQuoteDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     quoteCode: {
       type: String,
       required: true,
+      unique: true,
     },
     invoiceId: {
       type: Schema.Types.ObjectId,
@@ -247,8 +180,6 @@ const quoteSchema = new Schema<IQuoteDocument>(
     toObject: { virtuals: true },
   }
 );
-
-quoteSchema.index({ ownerId: 1, quoteCode: 1 }, { unique: true });
 
 quoteSchema.index({
   quoteCode: 'text',

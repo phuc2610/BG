@@ -25,7 +25,6 @@ export interface IPurchaseItemDocument {
 }
 
 export interface IPurchaseDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   purchaseCode: string;
   supplierId: mongoose.Types.ObjectId;
   supplier: {
@@ -80,14 +79,10 @@ const purchaseItemSchema = new Schema<IPurchaseItemDocument>(
 
 const purchaseSchema = new Schema<IPurchaseDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     purchaseCode: {
       type: String,
       required: true,
+      unique: true,
     },
     supplierId: {
       type: Schema.Types.ObjectId,
@@ -126,8 +121,6 @@ const purchaseSchema = new Schema<IPurchaseDocument>(
   }
 );
 
-purchaseSchema.index({ ownerId: 1, purchaseCode: 1 }, { unique: true });
-
 purchaseSchema.index({
   purchaseCode: 'text',
   'supplier.name': 'text',
@@ -137,18 +130,15 @@ purchaseSchema.index({
 export const Purchase = mongoose.model<IPurchaseDocument>('Purchase', purchaseSchema);
 
 /**
- * Generates purchase code formatted: PNYYYYMM0001 per owner
+ * Generates purchase code formatted: PNYYYYMM0001
  */
-export async function generatePurchaseCode(ownerId?: any): Promise<string> {
+export async function generatePurchaseCode(): Promise<string> {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const datePrefix = `PN${year}${month}`;
 
-  const filter: any = { purchaseCode: new RegExp(`^${datePrefix}`) };
-  if (ownerId) filter.ownerId = ownerId;
-
-  const latest = await Purchase.findOne(filter)
+  const latest = await Purchase.findOne({ purchaseCode: new RegExp(`^${datePrefix}`) })
     .sort({ purchaseCode: -1 })
     .exec();
 

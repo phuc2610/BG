@@ -18,38 +18,76 @@ class SettingsController {
         await settings.save();
         res.json({ success: true, data: settings });
     });
-    // POST /api/settings/logo
-    uploadLogo = (0, middleware_1.asyncHandler)(async (req, res) => {
+    // Helper method for single asset upload
+    uploadAsset = async (req, res, assetType, urlKey, publicIdKey) => {
         const file = req.file;
         if (!file) {
-            return res.status(400).json({ success: false, message: 'Không có file logo' });
+            return res.status(400).json({ success: false, message: `Không tìm thấy file ${assetType}` });
         }
         const settings = await (0, models_1.getSettings)();
-        // Delete old logo
-        if (settings.logoPublicId) {
-            await imageService.delete(settings.logoPublicId);
+        // Delete old asset if exists
+        const oldPublicId = settings[publicIdKey];
+        if (oldPublicId) {
+            await imageService.delete(oldPublicId);
         }
-        const result = await imageService.uploadSettingsImage(file.buffer, 'logo');
-        settings.logoUrl = result.url;
-        settings.logoPublicId = result.publicId;
+        const result = await imageService.uploadSettingsImage(file.buffer, assetType, file.originalname);
+        settings[urlKey] = result.url;
+        settings[publicIdKey] = result.publicId;
         await settings.save();
         res.json({ success: true, data: settings });
+    };
+    uploadLogo = (0, middleware_1.asyncHandler)(async (req, res) => {
+        await this.uploadAsset(req, res, 'logo', 'logoUrl', 'logoPublicId');
     });
-    // POST /api/settings/qr
     uploadQR = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const file = req.file;
-        if (!file) {
-            return res.status(400).json({ success: false, message: 'Không có file QR' });
-        }
+        await this.uploadAsset(req, res, 'qr', 'qrPaymentUrl', 'qrPaymentPublicId');
+    });
+    uploadSignature = (0, middleware_1.asyncHandler)(async (req, res) => {
+        await this.uploadAsset(req, res, 'signature', 'signatureUrl', 'signaturePublicId');
+    });
+    uploadStamp = (0, middleware_1.asyncHandler)(async (req, res) => {
+        await this.uploadAsset(req, res, 'stamp', 'stampUrl', 'stampPublicId');
+    });
+    uploadThankYou = (0, middleware_1.asyncHandler)(async (req, res) => {
+        await this.uploadAsset(req, res, 'thankYou', 'thankYouAssetUrl', 'thankYouAssetPublicId');
+    });
+    // DELETE /api/settings/asset/:assetType
+    deleteAsset = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const assetType = req.params.assetType;
         const settings = await (0, models_1.getSettings)();
-        // Delete old QR
-        if (settings.qrPaymentPublicId) {
-            await imageService.delete(settings.qrPaymentPublicId);
+        let publicIdKey = '';
+        let urlKey = '';
+        switch (assetType) {
+            case 'logo':
+                publicIdKey = 'logoPublicId';
+                urlKey = 'logoUrl';
+                break;
+            case 'qr':
+                publicIdKey = 'qrPaymentPublicId';
+                urlKey = 'qrPaymentUrl';
+                break;
+            case 'signature':
+                publicIdKey = 'signaturePublicId';
+                urlKey = 'signatureUrl';
+                break;
+            case 'stamp':
+                publicIdKey = 'stampPublicId';
+                urlKey = 'stampUrl';
+                break;
+            case 'thankYou':
+                publicIdKey = 'thankYouAssetPublicId';
+                urlKey = 'thankYouAssetUrl';
+                break;
+            default:
+                return res.status(400).json({ success: false, message: 'Loại asset không hợp lệ' });
         }
-        const result = await imageService.uploadSettingsImage(file.buffer, 'qr');
-        settings.qrPaymentUrl = result.url;
-        settings.qrPaymentPublicId = result.publicId;
-        await settings.save();
+        const publicId = settings[publicIdKey];
+        if (publicId) {
+            await imageService.delete(publicId);
+            settings[publicIdKey] = '';
+            settings[urlKey] = '';
+            await settings.save();
+        }
         res.json({ success: true, data: settings });
     });
 }

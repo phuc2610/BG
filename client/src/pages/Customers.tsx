@@ -94,57 +94,57 @@ export function Customers() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Tổng Khách Hàng</span>
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Tổng Doanh Thu</span>
               <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
-                <Users className="w-4 h-4" />
+                <TrendingUp className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-extrabold text-[rgb(var(--foreground))] mt-2">{stats.totalCustomers}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">+{stats.newThisMonth} khách mới tháng này</p>
+            <p className="text-xl font-extrabold text-[rgb(var(--foreground))] mt-2">{formatCurrency(stats.totalRevenue)}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Số tiền hàng đã bán ra</p>
           </div>
 
           <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Khách VIP</span>
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
-                <UserCheck className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-purple-500 mt-2">{stats.totalVip}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Khách hàng thân thiết</p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Doanh Nghiệp</span>
-              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-                <Building2 className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-indigo-500 mt-2">{stats.totalEnterprise}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Công ty / Tổ chức</p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Đang Có Nợ</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Tổng Thực Nhận</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
                 <CreditCard className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-extrabold text-amber-500 mt-2">{stats.customersWithDebt}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Khách cần theo dõi dư nợ</p>
+            <p className="text-xl font-extrabold text-emerald-500 mt-2">{formatCurrency(stats.totalPaid)}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Số tiền khách đã thực trả</p>
           </div>
 
           <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Nợ Quá Hạn</span>
-              <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center">
-                <ShieldAlert className="w-4 h-4" />
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Tổng Công Nợ Khách</span>
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                <AlertCircle className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-extrabold text-red-500 mt-2">{stats.overdueCustomers}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Khách cần đôn đốc thanh toán</p>
+            <p className="text-xl font-extrabold text-amber-500 mt-2">{formatCurrency(stats.totalDebt)}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Số tiền khách còn nợ lại</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Lợi Nhuận Gộp (Nếu Đủ)</span>
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-xl font-extrabold text-purple-500 mt-2">{formatCurrency(stats.totalProfit)}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Tổng lời nếu khách trả đủ</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Tổng Khách Hàng</span>
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-xl font-extrabold text-indigo-500 mt-2">{stats.totalCustomers}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Hồ sơ khách hàng CRM</p>
           </div>
         </div>
       )}

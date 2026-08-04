@@ -9,6 +9,8 @@ export interface AuthRequest extends Request {
     id: string;
     username: string;
     role: UserRole;
+    permissions: string[];
+    maxQuoteDiscountPercent: number;
   };
 }
 
@@ -60,17 +62,9 @@ export const authenticateUser = async (
       id: user._id.toString(),
       username: user.username,
       role: user.role,
+      permissions: user.permissions || [],
+      maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,
     };
-
-    // Auto-inject ownerId for USER requests
-    if (user.role === UserRole.USER) {
-      if (!req.query) req.query = {};
-      (req.query as any).ownerId = user._id.toString();
-
-      if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
-        req.body.ownerId = user._id.toString();
-      }
-    }
 
     next();
   } catch (err) {
@@ -93,4 +87,29 @@ export const requireAdmin = (
     });
   }
   next();
+};
+
+export const requirePermission = (permissionName: string) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Bạn chưa đăng nhập.',
+      });
+    }
+
+    // Admin or wildcard permission has full access
+    if (req.user.role === UserRole.ADMIN || req.user.permissions.includes('*')) {
+      return next();
+    }
+
+    if (req.user.permissions.includes(permissionName)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Bạn không có quyền [${permissionName}] để thực hiện thao tác này.`,
+    });
+  };
 };

@@ -1,7 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 import { CustomerType, ICustomerActivity } from '../types';
 export interface ICustomerDocument extends Document {
-    ownerId?: Schema.Types.ObjectId;
     customerCode: string;
     name: string;
     companyName?: string;
@@ -37,7 +36,7 @@ export declare const CustomerActivity: mongoose.Model<ICustomerActivity, {}, {},
     __v: number;
 }, any>;
 /**
- * Generates customer code formatted KH000001, KH000002... per owner
+ * Generates customer code formatted KH000001, KH000002...
  */
-export declare function generateCustomerCode(ownerId?: any): Promise<string>;
+export declare function generateCustomerCode(): Promise<string>;
 //# sourceMappingURL=customer.model.d.ts.map

@@ -15,7 +15,6 @@ export declare class PurchaseService {
         notes?: string;
         paidAmount?: number;
         dueDate?: Date;
-        ownerId?: string;
         items: Array<{
             productId: string;
             quantity: number;
@@ -38,6 +37,6 @@ export declare class PurchaseService {
     /**
      * Calculates overall Purchase Financial Dashboard statistics.
      */
-    getPurchaseStats(startDate?: string, endDate?: string, ownerId?: string): Promise<PurchaseStats>;
+    getPurchaseStats(startDate?: string, endDate?: string): Promise<PurchaseStats>;
 }
 //# sourceMappingURL=purchase.service.d.ts.map

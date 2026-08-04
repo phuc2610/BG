@@ -75,4 +75,5 @@ const asyncHandler = (fn) => {
 };
 exports.asyncHandler = asyncHandler;
 __exportStar(require("./auth.middleware"), exports);
+__exportStar(require("./fieldSecurity.middleware"), exports);
 //# sourceMappingURL=index.js.map

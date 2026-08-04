@@ -16,9 +16,8 @@ export class DebtController {
   });
 
   // GET /api/debts/stats
-  getDebtStats = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req as any).user?.id || (req.query as any).ownerId;
-    const stats = await debtService.getDebtStats(ownerId);
+  getDebtStats = asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await debtService.getDebtStats();
     res.json({ success: true, data: stats });
   });
 

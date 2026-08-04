@@ -43,7 +43,6 @@ export class PurchaseService {
     notes?: string;
     paidAmount?: number;
     dueDate?: Date;
-    ownerId?: string;
     items: Array<{
       productId: string;
       quantity: number;
@@ -64,7 +63,7 @@ export class PurchaseService {
     let totalAmount = 0;
     const unitsToCreate: any[] = [];
 
-    const purchaseCode = await generatePurchaseCode(data.ownerId);
+    const purchaseCode = await generatePurchaseCode();
     const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : new Date();
 
     for (const item of data.items) {
@@ -124,7 +123,6 @@ export class PurchaseService {
       // Prepare InventoryUnits to bulk insert
       for (const sn of parsedSerials) {
         unitsToCreate.push({
-          ownerId: data.ownerId,
           productId: product._id,
           productCode: product.productCode,
           productName: product.name,
@@ -169,7 +167,6 @@ export class PurchaseService {
     }
 
     const purchase = await purchaseRepo.create({
-      ownerId: data.ownerId as any,
       purchaseCode,
       supplierId: supplier._id as any,
       supplier: {
@@ -271,9 +268,8 @@ export class PurchaseService {
   /**
    * Calculates overall Purchase Financial Dashboard statistics.
    */
-  async getPurchaseStats(startDate?: string, endDate?: string, ownerId?: string): Promise<PurchaseStats> {
+  async getPurchaseStats(startDate?: string, endDate?: string): Promise<PurchaseStats> {
     const filter: any = {};
-    if (ownerId) filter.ownerId = ownerId;
     if (startDate || endDate) {
       filter.purchaseDate = {};
       if (startDate) filter.purchaseDate.$gte = new Date(startDate);
@@ -299,12 +295,9 @@ export class PurchaseService {
     }
 
     // Valuation of stock currently in warehouse at actual purchase price (AVAILABLE or RESERVED units)
-    const availableFilter: any = {
+    const availableUnits = await InventoryUnit.find({
       status: { $in: [InventoryUnitStatus.AVAILABLE, InventoryUnitStatus.RESERVED] },
-    };
-    if (ownerId) availableFilter.ownerId = ownerId;
-
-    const availableUnits = await InventoryUnit.find(availableFilter).exec();
+    }).exec();
 
     const currentStockValuation = availableUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
 

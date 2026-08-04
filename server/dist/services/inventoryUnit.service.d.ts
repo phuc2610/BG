@@ -12,7 +12,6 @@ export declare class InventoryUnitService {
         category?: ProductCategory;
         search?: string;
         warrantyStatus?: string;
-        ownerId?: string;
     }): Promise<{
         productId: mongoose.Types.ObjectId;
         productCode: string;
@@ -33,15 +32,13 @@ export declare class InventoryUnitService {
      */
     getGroupedInventoryByCondition(query: {
         search?: string;
-        ownerId?: string;
     }): Promise<any[]>;
     /**
      * Returns individual physical serial units for a specific Product with calculated warranty days.
      */
-    getUnitsByProduct(productId: string, ownerId?: string): Promise<{
+    getUnitsByProduct(productId: string): Promise<{
         remainingWarrantyDays: number;
         warrantyStatus: "DUE_SOON" | "NORMAL" | "EXPIRED";
-        ownerId?: mongoose.Types.ObjectId;
         productId: mongoose.Types.ObjectId;
         productCode: string;
         productName: string;

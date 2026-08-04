@@ -8,12 +8,12 @@ const multer_1 = __importDefault(require("multer"));
 const product_service_1 = require("../services/product.service");
 const storage = multer_1.default.memoryStorage();
 const fileFilter = (_req, file, cb) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (allowedMimes.includes(file.mimetype)) {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+    if (allowedMimes.includes(file.mimetype) || file.originalname.toLowerCase().endsWith('.svg')) {
         cb(null, true);
     }
     else {
-        cb(new product_service_1.AppError('Chỉ chấp nhận file ảnh (JPEG, PNG, WebP, GIF)', 400));
+        cb(new product_service_1.AppError('Chỉ chấp nhận file ảnh (JPEG, PNG, WebP, GIF, SVG)', 400));
     }
 };
 exports.upload = (0, multer_1.default)({

@@ -7,7 +7,7 @@ export declare class AppError extends Error {
 export declare class ProductService {
     getAll(query: ProductFilterQuery): Promise<import("../types").PaginatedResponse<IProductDocument>>;
     getById(id: string): Promise<IProductDocument>;
-    getStats(ownerId?: string): Promise<{
+    getStats(): Promise<{
         totalProducts: number;
         totalInventoryItems: number;
         totalStockQuantity: number;
@@ -17,8 +17,8 @@ export declare class ProductService {
         byCategory: Record<string, number>;
         byCondition: Record<string, number>;
     }>;
-    getBrands(ownerId?: string): Promise<string[]>;
-    getRecent(limit?: number, ownerId?: string): Promise<IProductDocument[]>;
+    getBrands(): Promise<string[]>;
+    getRecent(limit?: number): Promise<IProductDocument[]>;
     create(data: {
         name: string;
         category: ProductCategory;
@@ -27,12 +27,12 @@ export declare class ProductService {
         description?: string;
         specs?: any;
         createdBy?: string;
-        ownerId?: string;
     }): Promise<IProductDocument>;
     update(id: string, data: Partial<IProductDocument>): Promise<IProductDocument>;
     delete(id: string): Promise<IProductDocument | null>;
     clone(id: string): Promise<IProductDocument>;
-    uploadImages(id: string, files: Express.Multer.File[]): Promise<IProductDocument>;
+    uploadImages(productId: string, files: Express.Multer.File[]): Promise<IProductDocument>;
     deleteImage(productId: string, imageId: string): Promise<IProductDocument>;
+    setThumbnail(productId: string, imageId: string): Promise<IProductDocument>;
 }
 //# sourceMappingURL=product.service.d.ts.map

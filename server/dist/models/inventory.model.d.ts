@@ -1,7 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 import { ProductCondition } from '../types';
 export interface IInventoryDocument extends Document {
-    ownerId?: Schema.Types.ObjectId;
     stockCode: string;
     product: mongoose.Types.ObjectId;
     condition: ProductCondition;

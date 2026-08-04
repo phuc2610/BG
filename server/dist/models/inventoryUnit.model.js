@@ -37,11 +37,6 @@ exports.InventoryUnit = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const types_1 = require("../types");
 const inventoryUnitSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     productId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Product',
@@ -61,6 +56,7 @@ const inventoryUnitSchema = new mongoose_1.Schema({
     serialNumber: {
         type: String,
         required: true,
+        unique: true,
     },
     purchaseId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -127,7 +123,6 @@ const inventoryUnitSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-inventoryUnitSchema.index({ ownerId: 1, serialNumber: 1 }, { unique: true });
 inventoryUnitSchema.index({
     serialNumber: 'text',
     productCode: 'text',

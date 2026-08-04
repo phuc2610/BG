@@ -18,22 +18,21 @@ export class CustomerService {
     return customer;
   }
 
-  async getStats(ownerId?: string) {
-    return customerRepo.getStats(ownerId);
+  async getStats() {
+    return customerRepo.getStats();
   }
 
   /**
    * Auto-links or creates a customer by Phone number or Name to prevent duplicate records.
    */
-  async findOrCreateCustomer(data: Partial<ICustomer> & { ownerId?: string }, createdBy: string = 'Admin', ownerId?: string): Promise<ICustomerDocument> {
-    const targetOwnerId = ownerId || (data as any).ownerId;
+  async findOrCreateCustomer(data: Partial<ICustomer>, createdBy: string = 'Admin'): Promise<ICustomerDocument> {
     if (!data.name || !data.name.trim()) {
       throw new AppError('Tên khách hàng là bắt buộc', 400);
     }
 
     const phone = data.phone?.trim();
     if (phone) {
-      const existing = await customerRepo.findByPhone(phone, targetOwnerId);
+      const existing = await customerRepo.findByPhone(phone);
       if (existing) {
         // Update existing customer info if missing
         if (!existing.address && data.address) existing.address = data.address;
@@ -44,10 +43,9 @@ export class CustomerService {
       }
     }
 
-    const customerCode = await generateCustomerCode(targetOwnerId);
+    const customerCode = await generateCustomerCode();
 
     const newCustomer = await customerRepo.create({
-      ownerId: targetOwnerId as any,
       customerCode,
       name: data.name.trim(),
       companyName: data.companyName?.trim(),
@@ -73,8 +71,8 @@ export class CustomerService {
     return newCustomer;
   }
 
-  async create(data: Partial<ICustomer> & { ownerId?: string }, createdBy: string = 'Admin', ownerId?: string) {
-    return this.findOrCreateCustomer(data, createdBy, ownerId);
+  async create(data: Partial<ICustomer>, createdBy: string = 'Admin') {
+    return this.findOrCreateCustomer(data, createdBy);
   }
 
   async update(id: string, data: Partial<ICustomerDocument>) {

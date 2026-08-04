@@ -18,7 +18,6 @@ export class DebtService {
       debtStatus = 'all',
       customerId,
     } = query;
-    const ownerId = (query as any).ownerId;
 
     // Fetch invoices that have remaining debt or matching search
     const invoicesRes = await invoiceRepo.search({
@@ -26,8 +25,7 @@ export class DebtService {
       limit: 1000,
       search,
       customerId,
-      ownerId,
-    } as any);
+    });
 
     const now = new Date();
 
@@ -35,11 +33,13 @@ export class DebtService {
       .filter((inv) => inv.status !== InvoiceStatus.CANCELLED)
       .map((inv) => {
         const createdDate = new Date(inv.createdDate);
-        // Standard due date: 14 days after invoice creation
-        const dueDate = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+        const dueDate = inv.dueDate
+          ? new Date(inv.dueDate)
+          : new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
 
         const diffTime = now.getTime() - dueDate.getTime();
         const overdueDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+        const remainingDays = diffTime <= 0 ? Math.ceil(Math.abs(diffTime) / (1000 * 60 * 60 * 24)) : 0;
 
         let status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'DUE_SOON' | 'OVERDUE' | 'CANCELLED' = 'UNPAID';
 
@@ -47,7 +47,7 @@ export class DebtService {
           status = 'PAID';
         } else if (overdueDays > 0) {
           status = 'OVERDUE';
-        } else if (overdueDays >= -3) {
+        } else if (remainingDays <= 3) {
           status = 'DUE_SOON';
         } else if (inv.totalPaid > 0) {
           status = 'PARTIALLY_PAID';
@@ -66,6 +66,7 @@ export class DebtService {
           totalPaid: inv.totalPaid,
           remainingAmount: inv.remainingAmount,
           overdueDays,
+          remainingDays,
           debtStatus: status,
         };
       });
@@ -102,8 +103,8 @@ export class DebtService {
   /**
    * Calculates overall debt statistics for the Dashboard.
    */
-  async getDebtStats(ownerId?: string): Promise<DebtStats> {
-    const debtsRes = await this.getDebts({ limit: 5000, ownerId } as any);
+  async getDebtStats(): Promise<DebtStats> {
+    const debtsRes = await this.getDebts({ limit: 5000 });
     const debts = debtsRes.data;
 
     let totalDebt = 0;

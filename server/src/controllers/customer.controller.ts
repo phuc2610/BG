@@ -16,9 +16,8 @@ export class CustomerController {
   });
 
   // GET /api/customers/stats
-  getStats = asyncHandler(async (req: any, res: Response) => {
-    const ownerId = req.user?.id || req.query?.ownerId;
-    const stats = await customerService.getStats(ownerId);
+  getStats = asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await customerService.getStats();
     res.json({ success: true, data: stats });
   });
 
@@ -38,8 +37,7 @@ export class CustomerController {
 
   // POST /api/customers
   create = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req as any).user?.id || (req.body as any).ownerId;
-    const customer = await customerService.create(req.body, 'Admin', ownerId);
+    const customer = await customerService.create(req.body, 'Admin');
     res.status(201).json({ success: true, data: customer });
   });
 

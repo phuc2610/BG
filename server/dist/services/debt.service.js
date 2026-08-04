@@ -13,24 +13,24 @@ class DebtService {
      */
     async getDebts(query) {
         const { page = 1, limit = 20, search, debtStatus = 'all', customerId, } = query;
-        const ownerId = query.ownerId;
         // Fetch invoices that have remaining debt or matching search
         const invoicesRes = await invoiceRepo.search({
             page: 1,
             limit: 1000,
             search,
             customerId,
-            ownerId,
         });
         const now = new Date();
         const allDebts = invoicesRes.data
             .filter((inv) => inv.status !== types_1.InvoiceStatus.CANCELLED)
             .map((inv) => {
             const createdDate = new Date(inv.createdDate);
-            // Standard due date: 14 days after invoice creation
-            const dueDate = new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+            const dueDate = inv.dueDate
+                ? new Date(inv.dueDate)
+                : new Date(createdDate.getTime() + 14 * 24 * 60 * 60 * 1000);
             const diffTime = now.getTime() - dueDate.getTime();
             const overdueDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+            const remainingDays = diffTime <= 0 ? Math.ceil(Math.abs(diffTime) / (1000 * 60 * 60 * 24)) : 0;
             let status = 'UNPAID';
             if (inv.remainingAmount <= 0) {
                 status = 'PAID';
@@ -38,7 +38,7 @@ class DebtService {
             else if (overdueDays > 0) {
                 status = 'OVERDUE';
             }
-            else if (overdueDays >= -3) {
+            else if (remainingDays <= 3) {
                 status = 'DUE_SOON';
             }
             else if (inv.totalPaid > 0) {
@@ -57,6 +57,7 @@ class DebtService {
                 totalPaid: inv.totalPaid,
                 remainingAmount: inv.remainingAmount,
                 overdueDays,
+                remainingDays,
                 debtStatus: status,
             };
         });
@@ -92,8 +93,8 @@ class DebtService {
     /**
      * Calculates overall debt statistics for the Dashboard.
      */
-    async getDebtStats(ownerId) {
-        const debtsRes = await this.getDebts({ limit: 5000, ownerId });
+    async getDebtStats() {
+        const debtsRes = await this.getDebts({ limit: 5000 });
         const debts = debtsRes.data;
         let totalDebt = 0;
         let totalCollected = 0;

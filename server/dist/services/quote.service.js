@@ -26,11 +26,11 @@ class QuoteService {
         return quote;
     }
     async create(data) {
-        const quoteCode = await (0, models_1.generateQuoteCode)(data.ownerId);
+        const quoteCode = await (0, models_1.generateQuoteCode)();
         let customerId;
         if (data.customer && data.customer.name) {
             try {
-                const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy, data.ownerId);
+                const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy);
                 customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
             }
             catch (err) {
@@ -38,7 +38,6 @@ class QuoteService {
             }
         }
         const quote = await quoteRepo.create({
-            ownerId: data.ownerId,
             quoteCode,
             customerId,
             createdDate: new Date(),

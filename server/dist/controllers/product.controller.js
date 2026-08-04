@@ -12,27 +12,23 @@ class ProductController {
         const search = req.query.search;
         const category = req.query.category;
         const brand = req.query.brand;
-        const ownerId = req.query.ownerId;
         const result = await productService.getAll({
             page,
             limit,
             search,
             category,
             brand,
-            ownerId,
         });
         res.json({ success: true, ...result });
     });
     // GET /api/products/stats
-    getStats = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const ownerId = req.user?.id || req.query.ownerId;
-        const stats = await productService.getStats(ownerId);
+    getStats = (0, middleware_1.asyncHandler)(async (_req, res) => {
+        const stats = await productService.getStats();
         res.json({ success: true, data: stats });
     });
     // GET /api/products/brands
-    getBrands = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const ownerId = req.query.ownerId;
-        const brands = await productService.getBrands(ownerId);
+    getBrands = (0, middleware_1.asyncHandler)(async (_req, res) => {
+        const brands = await productService.getBrands();
         res.json({ success: true, data: brands });
     });
     // GET /api/products/:id
@@ -43,8 +39,7 @@ class ProductController {
     });
     // POST /api/products
     create = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const ownerId = req.body.ownerId || req.query.ownerId;
-        const product = await productService.create({ ...req.body, ownerId });
+        const product = await productService.create(req.body);
         res.status(201).json({ success: true, data: product });
     });
     // PUT /api/products/:id

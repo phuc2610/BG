@@ -1,7 +1,7 @@
 import { FilterQuery } from 'mongoose';
 import { BaseRepository } from './base.repository';
 import { InventoryUnit, IInventoryUnitDocument } from '../models';
-import { InventoryUnitFilterQuery, PaginatedResponse, InventoryUnitStatus } from '../types';
+import { InventoryUnitFilterQuery, PaginatedResponse } from '../types';
 
 export class InventoryUnitRepository extends BaseRepository<IInventoryUnitDocument> {
   constructor() {
@@ -26,7 +26,6 @@ export class InventoryUnitRepository extends BaseRepository<IInventoryUnitDocume
     if (productId) filter.productId = productId;
     if (supplierId) filter.supplierId = supplierId;
     if (status) filter.status = status;
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     const now = new Date();
     if (warrantyFilter === 'expired') {

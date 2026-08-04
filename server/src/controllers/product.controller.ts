@@ -12,7 +12,6 @@ export class ProductController {
     const search = req.query.search as string;
     const category = req.query.category as any;
     const brand = req.query.brand as string;
-    const ownerId = (req.query as any).ownerId;
 
     const result = await productService.getAll({
       page,
@@ -20,23 +19,20 @@ export class ProductController {
       search,
       category,
       brand,
-      ownerId,
     } as any);
 
     res.json({ success: true, ...result });
   });
 
   // GET /api/products/stats
-  getStats = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req as any).user?.id || (req.query as any).ownerId;
-    const stats = await productService.getStats(ownerId);
+  getStats = asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await productService.getStats();
     res.json({ success: true, data: stats });
   });
 
   // GET /api/products/brands
-  getBrands = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req.query as any).ownerId;
-    const brands = await productService.getBrands(ownerId);
+  getBrands = asyncHandler(async (_req: Request, res: Response) => {
+    const brands = await productService.getBrands();
     res.json({ success: true, data: brands });
   });
 
@@ -49,8 +45,7 @@ export class ProductController {
 
   // POST /api/products
   create = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req.body as any).ownerId || (req.query as any).ownerId;
-    const product = await productService.create({ ...req.body, ownerId });
+    const product = await productService.create(req.body);
     res.status(201).json({ success: true, data: product });
   });
 

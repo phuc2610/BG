@@ -36,42 +36,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Quote = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const types_1 = require("../types");
-const quoteItemSnapshotSchema = new mongoose_1.Schema({
-    name: { type: String, required: true },
-    productCode: { type: String, required: true },
-    condition: { type: String, required: true },
-    costPrice: { type: Number, default: 0 },
-    specs: {
-        type: new mongoose_1.Schema({
-            cpu: String,
-            mainboard: String,
-            ram: String,
-            ssd: String,
-            hdd: String,
-            vga: String,
-            psu: String,
-            case: String,
-            cooler: String,
-            windows: String,
-            office: String,
-            accessories: String,
-            notes: String,
-        }, { _id: false }),
-        default: () => ({}),
-    },
-    imageUrl: String,
-    serialNumber: String,
-}, { _id: false });
 const quoteItemSchema = new mongoose_1.Schema({
-    inventoryItem: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'Inventory',
-        required: true,
-    },
-    productSnapshot: {
-        type: quoteItemSnapshotSchema,
-        required: true,
-    },
+    inventoryItem: mongoose_1.Schema.Types.Mixed,
+    productSnapshot: mongoose_1.Schema.Types.Mixed,
     unitPrice: {
         type: Number,
         required: true,
@@ -116,14 +83,10 @@ const customerSchema = new mongoose_1.Schema({
     notes: String,
 }, { _id: false });
 const quoteSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     quoteCode: {
         type: String,
         required: true,
+        unique: true,
     },
     invoiceId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -208,7 +171,6 @@ const quoteSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-quoteSchema.index({ ownerId: 1, quoteCode: 1 }, { unique: true });
 quoteSchema.index({
     quoteCode: 'text',
     'customer.name': 'text',

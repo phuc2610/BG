@@ -17,7 +17,6 @@ export declare class QuoteService {
         };
         createdBy?: string;
         notes?: string;
-        ownerId?: string;
     }): Promise<IQuoteDocument>;
     update(id: string, data: Partial<IQuoteDocument>): Promise<IQuoteDocument>;
     delete(id: string): Promise<IQuoteDocument | null>;

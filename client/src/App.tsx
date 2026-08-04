@@ -26,8 +26,9 @@ import { AdminDashboard } from '@/pages/AdminDashboard';
 import { GlobalSearch } from '@/components/shared/GlobalSearch';
 import { useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
+import { ShieldAlert } from 'lucide-react';
 
-function UserPrivateRoute() {
+function ProtectedRoute() {
   const { user, isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
@@ -40,10 +41,6 @@ function UserPrivateRoute() {
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (user.role === 'ADMIN') {
-    return <Navigate to="/admin" replace />;
   }
 
   return <Outlet />;
@@ -65,6 +62,24 @@ function AdminPrivateRoute() {
   }
 
   return <Outlet />;
+}
+
+function PermissionGuard({ permissionKey, children }: { permissionKey: string; children: React.ReactNode }) {
+  const { hasPermission } = useAuthStore();
+  if (!hasPermission(permissionKey)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center animate-fade-in">
+        <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-[rgb(var(--foreground))]">Không có quyền truy cập</h2>
+        <p className="text-sm text-[rgb(var(--muted-foreground))] mt-2 max-w-md">
+          Bạn không có quyền <code className="text-xs bg-red-500/10 text-red-500 px-2 py-0.5 rounded font-mono">{permissionKey}</code> để sử dụng chức năng này. Vui lòng liên hệ Quản trị viên để được cấp quyền.
+        </p>
+      </div>
+    );
+  }
+  return children;
 }
 
 export default function App() {
@@ -98,28 +113,28 @@ export default function App() {
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>
 
-        {/* Protected User Routes */}
-        <Route element={<UserPrivateRoute />}>
+        {/* Protected Operational Routes for both USER and ADMIN */}
+        <Route element={<ProtectedRoute />}>
           <Route path="/" element={<MainLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="customers/:id" element={<CustomerDetail />} />
-            <Route path="suppliers" element={<Suppliers />} />
-            <Route path="suppliers/:id" element={<SupplierDetail />} />
-            <Route path="purchases" element={<Purchases />} />
-            <Route path="purchases/new" element={<PurchaseForm />} />
-            <Route path="products" element={<Products />} />
-            <Route path="products/new" element={<ProductForm />} />
-            <Route path="products/:id" element={<ProductForm />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="supplier-warranties" element={<SupplierWarranty />} />
-            <Route path="quotes" element={<Quotes />} />
-            <Route path="quotes/new" element={<QuoteForm />} />
-            <Route path="quotes/:id" element={<QuoteForm />} />
-            <Route path="invoices" element={<Invoices />} />
-            <Route path="invoices/:id" element={<InvoiceDetail />} />
-            <Route path="debts" element={<Debts />} />
-            <Route path="settings" element={<Settings />} />
+            <Route index element={<PermissionGuard permissionKey="dashboard.view"><Dashboard /></PermissionGuard>} />
+            <Route path="customers" element={<PermissionGuard permissionKey="customer.view"><Customers /></PermissionGuard>} />
+            <Route path="customers/:id" element={<PermissionGuard permissionKey="customer.view"><CustomerDetail /></PermissionGuard>} />
+            <Route path="suppliers" element={<PermissionGuard permissionKey="supplier.view"><Suppliers /></PermissionGuard>} />
+            <Route path="suppliers/:id" element={<PermissionGuard permissionKey="supplier.view"><SupplierDetail /></PermissionGuard>} />
+            <Route path="purchases" element={<PermissionGuard permissionKey="purchase.view"><Purchases /></PermissionGuard>} />
+            <Route path="purchases/new" element={<PermissionGuard permissionKey="purchase.create"><PurchaseForm /></PermissionGuard>} />
+            <Route path="products" element={<PermissionGuard permissionKey="product.view"><Products /></PermissionGuard>} />
+            <Route path="products/new" element={<PermissionGuard permissionKey="product.create"><ProductForm /></PermissionGuard>} />
+            <Route path="products/:id" element={<PermissionGuard permissionKey="product.edit"><ProductForm /></PermissionGuard>} />
+            <Route path="inventory" element={<PermissionGuard permissionKey="inventory.view"><Inventory /></PermissionGuard>} />
+            <Route path="supplier-warranties" element={<PermissionGuard permissionKey="warranty.supplier.view"><SupplierWarranty /></PermissionGuard>} />
+            <Route path="quotes" element={<PermissionGuard permissionKey="quote.view"><Quotes /></PermissionGuard>} />
+            <Route path="quotes/new" element={<PermissionGuard permissionKey="quote.create"><QuoteForm /></PermissionGuard>} />
+            <Route path="quotes/:id" element={<PermissionGuard permissionKey="quote.view"><QuoteForm /></PermissionGuard>} />
+            <Route path="invoices" element={<PermissionGuard permissionKey="invoice.view"><Invoices /></PermissionGuard>} />
+            <Route path="invoices/:id" element={<PermissionGuard permissionKey="invoice.view"><InvoiceDetail /></PermissionGuard>} />
+            <Route path="debts" element={<PermissionGuard permissionKey="customer.debt.view"><Debts /></PermissionGuard>} />
+            <Route path="settings" element={<PermissionGuard permissionKey="settings.view"><Settings /></PermissionGuard>} />
           </Route>
         </Route>
 

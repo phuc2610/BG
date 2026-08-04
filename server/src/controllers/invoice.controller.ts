@@ -16,9 +16,8 @@ export class InvoiceController {
   });
 
   // GET /api/invoices/stats
-  getStats = asyncHandler(async (req: any, res: Response) => {
-    const ownerId = req.user?.id || req.query?.ownerId;
-    const stats = await invoiceService.getStats(ownerId);
+  getStats = asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await invoiceService.getStats();
     res.json({ success: true, data: stats });
   });
 
@@ -35,8 +34,7 @@ export class InvoiceController {
       ? req.params.quoteId[0]
       : req.params.quoteId;
     const { createdBy } = req.body;
-    const ownerId = (req as any).user?.id || (req.body as any).ownerId;
-    const invoice = await invoiceService.createFromQuote(quoteId, createdBy, ownerId);
+    const invoice = await invoiceService.createFromQuote(quoteId, createdBy);
     res.status(201).json({ success: true, data: invoice });
   });
 

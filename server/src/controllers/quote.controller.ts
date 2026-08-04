@@ -35,8 +35,7 @@ export class QuoteController {
 
   // POST /api/quotes
   create = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req as any).user?.id || (req.body as any).ownerId;
-    const quote = await quoteService.create({ ...req.body, ownerId });
+    const quote = await quoteService.create(req.body);
     res.status(201).json({ success: true, data: quote });
   });
 

@@ -190,7 +190,8 @@ export function InvoiceDetail() {
 
   const handlePrint = () => {
     if (!invoice) return;
-    window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/pdf/invoices/${invoice._id}`, '_blank');
+    const apiUrl = import.meta.env.VITE_API_URL || '/api';
+    window.open(`${apiUrl}/pdf/invoices/${invoice._id}/html`, '_blank');
   };
 
   if (loading || !invoice) {

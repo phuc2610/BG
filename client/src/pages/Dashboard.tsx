@@ -4,6 +4,7 @@ import { cn, formatCurrency } from '@/lib/utils';
 import type { DashboardStats, InventoryItem } from '@/types';
 import { ProductCategory, ProductCondition } from '@/types';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 import {
   Package, Warehouse, Laptop, Cpu, MemoryStick, HardDrive,
   Gamepad2, CircuitBoard, Plug, Box, Monitor, TrendingUp,
@@ -25,6 +26,7 @@ const categoryConfig: { key: string; label: string; icon: any; gradient: string 
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentInventory, setRecentInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,60 +57,72 @@ export function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard Quản Lý Cửa Hàng</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
-            Tổng quan danh mục sản phẩm, kho linh kiện & lợi nhuận đơn hàng
+            Tổng quan danh mục sản phẩm, kho linh kiện & hệ thống kho chung
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/products/new')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgb(var(--border))] text-sm font-medium hover:bg-[rgb(var(--accent))] transition-smooth"
-          >
-            <Plus className="w-4 h-4 text-blue-500" />
-            Tạo Mã SP Mới
-          </button>
-          <button
-            onClick={() => navigate('/inventory')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth shadow-lg shadow-blue-500/25"
-          >
-            <Warehouse className="w-4 h-4" />
-            Nhập Kho Linh Kiện
-          </button>
+          {hasPermission('product.create') && (
+            <button
+              onClick={() => navigate('/products/new')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgb(var(--border))] text-sm font-medium hover:bg-[rgb(var(--accent))] transition-smooth"
+            >
+              <Plus className="w-4 h-4 text-blue-500" />
+              Tạo Mã SP Mới
+            </button>
+          )}
+          {hasPermission('purchase.create') && (
+            <button
+              onClick={() => navigate('/purchases')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth shadow-lg shadow-blue-500/25"
+            >
+              <Warehouse className="w-4 h-4" />
+              Nhập Hàng
+            </button>
+          )}
         </div>
       </div>
 
       {/* Financial Profit Stats (Revenue - Cost = Profit) */}
-      <div>
-        <h2 className="text-xs font-bold text-[rgb(var(--muted-foreground))] uppercase tracking-wider mb-3">
-          Thống kê doanh thu & giá vốn kho (Hóa đơn đã chốt)
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FinancialStatCard
-            label="Tổng doanh thu bán ra"
-            value={formatCurrency(stats?.totalRevenue || 0)}
-            subtitle="Doanh thu từ các hóa đơn đã chốt"
-            icon={DollarSign}
-            gradient="from-blue-500 to-cyan-500"
-            loading={loading}
-          />
-          <FinancialStatCard
-            label="Tổng giá vốn kho (Còn Tồn)"
-            value={formatCurrency(stats?.totalStockValuation || 0)}
-            subtitle="Tổng tiền nhập hàng cho tất cả linh kiện còn tồn"
-            icon={Wallet}
-            gradient="from-amber-500 to-orange-500"
-            loading={loading}
-          />
-          <FinancialStatCard
-            label="Tiền lời (Lợi nhuận gộp)"
-            value={formatCurrency(stats?.totalProfit || 0)}
-            subtitle="Doanh thu bán ra - Giá vốn xuất bán"
-            icon={ArrowUpRight}
-            gradient="from-emerald-500 to-teal-500"
-            highlight
-            loading={loading}
-          />
+      {(hasPermission('dashboard.revenue') || hasPermission('dashboard.inventory_value') || hasPermission('dashboard.profit')) && (
+        <div>
+          <h2 className="text-xs font-bold text-[rgb(var(--muted-foreground))] uppercase tracking-wider mb-3">
+            Thống kê tài chính & giá vốn kho
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {hasPermission('dashboard.revenue') && (
+              <FinancialStatCard
+                label="Tổng doanh thu bán ra"
+                value={formatCurrency(stats?.totalRevenue || 0)}
+                subtitle="Doanh thu từ các hóa đơn đã chốt"
+                icon={DollarSign}
+                gradient="from-blue-500 to-cyan-500"
+                loading={loading}
+              />
+            )}
+            {hasPermission('dashboard.inventory_value') && (
+              <FinancialStatCard
+                label="Tổng giá vốn kho (Còn Tồn)"
+                value={formatCurrency(stats?.totalStockValuation || 0)}
+                subtitle="Tổng tiền nhập hàng cho tất cả linh kiện còn tồn"
+                icon={Wallet}
+                gradient="from-amber-500 to-orange-500"
+                loading={loading}
+              />
+            )}
+            {hasPermission('dashboard.profit') && (
+              <FinancialStatCard
+                label="Tiền lời (Lợi nhuận gộp)"
+                value={formatCurrency(stats?.totalProfit || 0)}
+                subtitle="Doanh thu bán ra - Giá vốn xuất bán"
+                icon={ArrowUpRight}
+                gradient="from-emerald-500 to-teal-500"
+                highlight
+                loading={loading}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Debt & Store Management Stats */}
       <div>
@@ -116,22 +130,26 @@ export function Dashboard() {
           Thống kê công nợ & vận hành cửa hàng
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <FinancialStatCard
-            label="Tổng công nợ khách hàng"
-            value={formatCurrency(stats?.totalCustomerDebt || 0)}
-            subtitle="Số tiền khách hàng còn nợ"
-            icon={Users}
-            gradient="from-purple-500 to-indigo-500"
-            loading={loading}
-          />
-          <FinancialStatCard
-            label="Tổng công nợ nhà cung cấp"
-            value={formatCurrency(stats?.totalSupplierDebt || 0)}
-            subtitle="Số tiền còn nợ nhà cung cấp"
-            icon={Truck}
-            gradient="from-rose-500 to-pink-500"
-            loading={loading}
-          />
+          {hasPermission('dashboard.customer_debt') && (
+            <FinancialStatCard
+              label="Tổng công nợ khách hàng"
+              value={formatCurrency(stats?.totalCustomerDebt || 0)}
+              subtitle="Số tiền khách hàng còn nợ"
+              icon={Users}
+              gradient="from-purple-500 to-indigo-500"
+              loading={loading}
+            />
+          )}
+          {hasPermission('dashboard.supplier_debt') && (
+            <FinancialStatCard
+              label="Tổng công nợ nhà cung cấp"
+              value={formatCurrency(stats?.totalSupplierDebt || 0)}
+              subtitle="Số tiền còn nợ nhà cung cấp"
+              icon={Truck}
+              gradient="from-rose-500 to-pink-500"
+              loading={loading}
+            />
+          )}
           <StatCard
             label="Hóa đơn bán hàng đã chốt"
             value={stats?.totalFinalizedInvoices || 0}

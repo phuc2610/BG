@@ -1,6 +1,5 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 export interface ISupplierDocument extends Document {
-    ownerId?: Schema.Types.ObjectId;
     supplierCode: string;
     name: string;
     companyName?: string;
@@ -27,7 +26,7 @@ export declare const Supplier: mongoose.Model<ISupplierDocument, {}, {}, {}, mon
     __v: number;
 }, any>;
 /**
- * Generates supplier code formatted: NCC000001, NCC000002... per owner
+ * Generates supplier code formatted: NCC000001, NCC000002...
  */
-export declare function generateSupplierCode(ownerId?: any): Promise<string>;
+export declare function generateSupplierCode(): Promise<string>;
 //# sourceMappingURL=supplier.model.d.ts.map

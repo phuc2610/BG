@@ -6,7 +6,6 @@ import {
 } from '../types';
 
 export interface IProductDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   productId: string;
   productCode: string;
   barcode: string;
@@ -52,18 +51,15 @@ const productSpecsSchema = new Schema<IProductSpecs>(
 
 const productSchema = new Schema<IProductDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     productId: {
       type: String,
       required: true,
+      unique: true,
     },
     productCode: {
       type: String,
       required: true,
+      unique: true,
     },
     barcode: {
       type: String,
@@ -105,9 +101,6 @@ const productSchema = new Schema<IProductDocument>(
     toObject: { virtuals: true },
   }
 );
-
-productSchema.index({ ownerId: 1, productCode: 1 }, { unique: true });
-productSchema.index({ ownerId: 1, productId: 1 }, { unique: true });
 
 productSchema.index({
   name: 'text',

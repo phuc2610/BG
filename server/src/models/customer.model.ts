@@ -2,7 +2,6 @@ import mongoose, { Schema, Document } from 'mongoose';
 import { CustomerType, ICustomerActivity } from '../types';
 
 export interface ICustomerDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   customerCode: string;
   name: string;
   companyName?: string;
@@ -46,14 +45,10 @@ const customerActivitySchema = new Schema<ICustomerActivity>(
 
 const customerSchema = new Schema<ICustomerDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     customerCode: {
       type: String,
       required: true,
+      unique: true,
     },
     name: {
       type: String,
@@ -95,8 +90,6 @@ const customerSchema = new Schema<ICustomerDocument>(
   }
 );
 
-customerSchema.index({ ownerId: 1, customerCode: 1 }, { unique: true });
-
 customerSchema.index({
   customerCode: 'text',
   name: 'text',
@@ -108,13 +101,10 @@ export const Customer = mongoose.model<ICustomerDocument>('Customer', customerSc
 export const CustomerActivity = mongoose.model<ICustomerActivity>('CustomerActivity', customerActivitySchema);
 
 /**
- * Generates customer code formatted KH000001, KH000002... per owner
+ * Generates customer code formatted KH000001, KH000002...
  */
-export async function generateCustomerCode(ownerId?: any): Promise<string> {
-  const filter: any = { customerCode: /^KH\d+/ };
-  if (ownerId) filter.ownerId = ownerId;
-
-  const latest = await Customer.findOne(filter)
+export async function generateCustomerCode(): Promise<string> {
+  const latest = await Customer.findOne({ customerCode: /^KH\d+/ })
     .sort({ customerCode: -1 })
     .exec();
 

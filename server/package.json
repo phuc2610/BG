@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "seed": "tsx src/utils/seed.ts",
-    "clear": "tsx src/utils/clear.ts"
+    "clear": "tsx src/utils/clear.ts",
+    "reset-business-data": "npx tsx scripts/reset-business-data.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

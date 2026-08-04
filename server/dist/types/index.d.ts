@@ -159,6 +159,7 @@ export interface IDebt {
     totalPaid: number;
     remainingAmount: number;
     overdueDays: number;
+    remainingDays: number;
     debtStatus: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'DUE_SOON' | 'OVERDUE' | 'CANCELLED';
 }
 export interface IQuoteItemSnapshot {
@@ -391,8 +392,16 @@ export interface IInvoice {
     createdAt?: Date;
     updatedAt?: Date;
 }
+export interface IBenefitItem {
+    id: string;
+    enabled: boolean;
+    title: string;
+    description: string;
+    sortOrder: number;
+}
 export interface ISettings {
     storeName: string;
+    tagline?: string;
     hotline: string;
     website?: string;
     facebook?: string;
@@ -402,8 +411,17 @@ export interface ISettings {
     logoPublicId?: string;
     qrPaymentUrl?: string;
     qrPaymentPublicId?: string;
+    signatureUrl?: string;
+    signaturePublicId?: string;
+    stampUrl?: string;
+    stampPublicId?: string;
+    thankYouAssetUrl?: string;
+    thankYouAssetPublicId?: string;
+    signerName?: string;
+    signerTitle?: string;
     bankInfo?: string;
     terms: string[];
+    benefits?: IBenefitItem[];
     footerText: string;
 }
 export interface PaginationQuery {
@@ -493,11 +511,10 @@ export interface InvoiceStats {
 }
 export interface CustomerStats {
     totalCustomers: number;
-    newThisMonth: number;
-    totalVip: number;
-    totalEnterprise: number;
-    customersWithDebt: number;
-    overdueCustomers: number;
+    totalRevenue: number;
+    totalPaid: number;
+    totalDebt: number;
+    totalProfit: number;
 }
 export interface DebtStats {
     totalDebt: number;

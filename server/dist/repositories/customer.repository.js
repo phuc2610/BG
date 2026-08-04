@@ -9,15 +9,13 @@ class CustomerRepository extends base_repository_1.BaseRepository {
         super(models_1.Customer);
     }
     async search(query) {
-        const { page = 1, limit = 20, search, sort = 'createdAt', order = 'desc', customerType, hasDebtOnly = false, isOverdueOnly = false, } = query;
+        const { page = 1, limit = 20, search, sort = 'createdAt', order = 'desc', customerType, hasDebtOnly = false, } = query;
         const filter = {};
         if (customerType)
             filter.customerType = customerType;
         const isHasDebt = hasDebtOnly === true || String(hasDebtOnly) === 'true';
         if (isHasDebt)
             filter.totalDebt = { $gt: 0 };
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         if (search && search.trim()) {
             const searchRegex = new RegExp(search.trim(), 'i');
             filter.$or = [
@@ -50,34 +48,30 @@ class CustomerRepository extends base_repository_1.BaseRepository {
             },
         };
     }
-    async findByPhone(phone, ownerId) {
+    async findByPhone(phone) {
         if (!phone || !phone.trim())
             return null;
-        const filter = { phone: phone.trim() };
-        if (ownerId)
-            filter.ownerId = ownerId;
-        return this.model.findOne(filter).exec();
+        return this.model.findOne({ phone: phone.trim() }).exec();
     }
-    async getStats(ownerId) {
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const filter = {};
-        if (ownerId)
-            filter.ownerId = ownerId;
-        const [totalCustomers, newThisMonth, totalVip, totalEnterprise, customersWithDebt,] = await Promise.all([
-            this.model.countDocuments(filter),
-            this.model.countDocuments({ ...filter, createdAt: { $gte: startOfMonth } }),
-            this.model.countDocuments({ ...filter, customerType: types_1.CustomerType.VIP }),
-            this.model.countDocuments({ ...filter, customerType: types_1.CustomerType.ENTERPRISE }),
-            this.model.countDocuments({ ...filter, totalDebt: { $gt: 0 } }),
-        ]);
+    async getStats() {
+        const totalCustomers = await this.model.countDocuments({}).exec();
+        const invoices = await models_1.Invoice.find({ status: { $ne: types_1.InvoiceStatus.CANCELLED } }).exec();
+        let totalRevenue = 0;
+        let totalPaid = 0;
+        let totalDebt = 0;
+        let totalProfit = 0;
+        for (const inv of invoices) {
+            totalRevenue += inv.grandTotal || 0;
+            totalPaid += inv.totalPaid || 0;
+            totalDebt += inv.remainingAmount || 0;
+            totalProfit += (inv.profit !== undefined ? inv.profit : ((inv.grandTotal || 0) - (inv.totalCost || 0)));
+        }
         return {
             totalCustomers,
-            newThisMonth,
-            totalVip,
-            totalEnterprise,
-            customersWithDebt,
-            overdueCustomers: 0, // calculated via DebtService
+            totalRevenue,
+            totalPaid,
+            totalDebt,
+            totalProfit,
         };
     }
 }

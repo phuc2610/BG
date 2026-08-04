@@ -23,7 +23,6 @@ export class InvoiceRepository extends BaseRepository<IInvoiceDocument> {
     const filter: FilterQuery<IInvoiceDocument> = {};
 
     if (status) filter.status = status;
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     if (startDate || endDate) {
       filter.createdDate = {};
@@ -69,10 +68,8 @@ export class InvoiceRepository extends BaseRepository<IInvoiceDocument> {
     };
   }
 
-  async getStats(ownerId?: string): Promise<InvoiceStats> {
-    const filter: any = { status: { $ne: InvoiceStatus.CANCELLED } };
-    if (ownerId) filter.ownerId = ownerId;
-    const activeInvoices = await this.model.find(filter).exec();
+  async getStats(): Promise<InvoiceStats> {
+    const activeInvoices = await this.model.find({ status: { $ne: InvoiceStatus.CANCELLED } }).exec();
 
     const totalInvoices = activeInvoices.length;
     let totalRevenue = 0;

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireAdmin = exports.authenticateUser = void 0;
+exports.requirePermission = exports.requireAdmin = exports.authenticateUser = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const models_1 = require("../models");
 const JWT_SECRET = process.env.JWT_SECRET || 'np_computer_jwt_secret_key_2026';
@@ -46,16 +46,9 @@ const authenticateUser = async (req, res, next) => {
             id: user._id.toString(),
             username: user.username,
             role: user.role,
+            permissions: user.permissions || [],
+            maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,
         };
-        // Auto-inject ownerId for USER requests
-        if (user.role === models_1.UserRole.USER) {
-            if (!req.query)
-                req.query = {};
-            req.query.ownerId = user._id.toString();
-            if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
-                req.body.ownerId = user._id.toString();
-            }
-        }
         next();
     }
     catch (err) {
@@ -76,4 +69,26 @@ const requireAdmin = (req, res, next) => {
     next();
 };
 exports.requireAdmin = requireAdmin;
+const requirePermission = (permissionName) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Bạn chưa đăng nhập.',
+            });
+        }
+        // Admin or wildcard permission has full access
+        if (req.user.role === models_1.UserRole.ADMIN || req.user.permissions.includes('*')) {
+            return next();
+        }
+        if (req.user.permissions.includes(permissionName)) {
+            return next();
+        }
+        return res.status(403).json({
+            success: false,
+            message: `Bạn không có quyền [${permissionName}] để thực hiện thao tác này.`,
+        });
+    };
+};
+exports.requirePermission = requirePermission;
 //# sourceMappingURL=auth.middleware.js.map

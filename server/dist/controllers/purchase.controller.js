@@ -15,8 +15,7 @@ class PurchaseController {
     // GET /api/purchases/stats
     getStats = asyncHandler(async (req, res) => {
         const { startDate, endDate } = req.query;
-        const ownerId = req.user?.id || req.query.ownerId;
-        const stats = await purchaseService.getPurchaseStats(startDate, endDate, ownerId);
+        const stats = await purchaseService.getPurchaseStats(startDate, endDate);
         res.json({ success: true, data: stats });
     });
     // GET /api/purchases/:id
@@ -27,8 +26,7 @@ class PurchaseController {
     });
     // POST /api/purchases
     create = asyncHandler(async (req, res) => {
-        const ownerId = req.user?.id || req.body.ownerId;
-        const purchase = await purchaseService.create({ ...req.body, ownerId });
+        const purchase = await purchaseService.create(req.body);
         res.status(201).json({ success: true, data: purchase });
     });
     // POST /api/purchases/:id/payments

@@ -10,6 +10,7 @@ export function Register() {
   const { register } = useAuthStore();
 
   const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -28,6 +29,10 @@ export function Register() {
       setErrorMessage('Tên đăng nhập phải từ 4 đến 30 ký tự');
       return;
     }
+    if (!fullName.trim()) {
+      setErrorMessage('Vui lòng nhập Họ và tên (hiển thị trên Hóa đơn / Báo giá)');
+      return;
+    }
     if (!password) {
       setErrorMessage('Vui lòng nhập Mật khẩu');
       return;
@@ -43,7 +48,7 @@ export function Register() {
 
     try {
       setSubmitting(true);
-      await register(username.trim(), password, confirmPassword);
+      await register(username.trim(), fullName.trim(), password, confirmPassword);
       setRegisteredSuccess(true);
       toast.success('Đăng ký tài khoản thành công!');
     } catch (err: any) {
@@ -107,6 +112,18 @@ export function Register() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="VD: user123 (4-30 ký tự)"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold mb-1.5">Họ và tên người dùng (Hiển thị người lập Hóa đơn/Báo giá) *</label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="VD: Nguyễn Văn A"
                 className={inputClass}
               />
             </div>

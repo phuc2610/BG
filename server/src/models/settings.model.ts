@@ -1,27 +1,60 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ISettings } from '../types';
+import { ISettings, IBenefitItem } from '../types';
 
-export interface ISettingsDocument extends ISettings, Document {
-  ownerId?: Schema.Types.ObjectId;
-}
+export interface ISettingsDocument extends ISettings, Document {}
+
+export const DEFAULT_BENEFITS: IBenefitItem[] = [
+  {
+    id: 'b1',
+    enabled: true,
+    title: 'Sản phẩm chính hãng',
+    description: '100% chính hãng,\nđầy đủ hóa đơn VAT.',
+    sortOrder: 1,
+  },
+  {
+    id: 'b2',
+    enabled: true,
+    title: 'Đổi trả linh hoạt',
+    description: 'Hỗ trợ đổi trả trong\n7 ngày nếu có lỗi.',
+    sortOrder: 2,
+  },
+  {
+    id: 'b3',
+    enabled: true,
+    title: 'Bảo hành uy tín',
+    description: 'Bảo hành theo hãng,\nhỗ trợ tận tâm.',
+    sortOrder: 3,
+  },
+  {
+    id: 'b4',
+    enabled: true,
+    title: 'Hỗ trợ nhanh chóng',
+    description: 'Tư vấn 24/7,\ngiải đáp tận tình.',
+    sortOrder: 4,
+  },
+];
 
 const settingsSchema = new Schema<ISettingsDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     storeName: { type: String, default: 'NP Computer' },
+    tagline: { type: String, default: 'LINH KIỆN • PC GAMING • WORKSTATION' },
     hotline: { type: String, default: '0123.456.789' },
-    website: { type: String, default: '' },
-    facebook: { type: String, default: '' },
-    address: { type: String, default: '' },
-    email: { type: String, default: '' },
+    website: { type: String, default: 'npcomputer.vn' },
+    facebook: { type: String, default: 'facebook.com/npcomputer.vn' },
+    address: { type: String, default: '130' },
+    email: { type: String, default: 'thanh.nguyen@example.com' },
     logoUrl: { type: String, default: '' },
     logoPublicId: { type: String, default: '' },
     qrPaymentUrl: { type: String, default: '' },
     qrPaymentPublicId: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
+    signaturePublicId: { type: String, default: '' },
+    stampUrl: { type: String, default: '' },
+    stampPublicId: { type: String, default: '' },
+    thankYouAssetUrl: { type: String, default: '' },
+    thankYouAssetPublicId: { type: String, default: '' },
+    signerName: { type: String, default: 'NP Computer' },
+    signerTitle: { type: String, default: 'XÁC NHẬN BÁO GIÁ / HÓA ĐƠN' },
     bankInfo: { type: String, default: '' },
     terms: {
       type: [String],
@@ -32,6 +65,18 @@ const settingsSchema = new Schema<ISettingsDocument>(
         'Giá có thể thay đổi mà không báo trước.',
         'Báo giá có hiệu lực trong 7 ngày kể từ ngày lập.',
       ],
+    },
+    benefits: {
+      type: [
+        {
+          id: { type: String, required: true },
+          enabled: { type: Boolean, default: true },
+          title: { type: String, default: '' },
+          description: { type: String, default: '' },
+          sortOrder: { type: Number, default: 1 },
+        },
+      ],
+      default: DEFAULT_BENEFITS,
     },
     footerText: {
       type: String,
@@ -46,15 +91,15 @@ const settingsSchema = new Schema<ISettingsDocument>(
 export const Settings = mongoose.model<ISettingsDocument>('Settings', settingsSchema);
 
 /**
- * Get or create default settings per owner
+ * Get or create global default settings
  */
-export const getSettings = async (ownerId?: any): Promise<ISettingsDocument> => {
-  const filter: any = {};
-  if (ownerId) filter.ownerId = ownerId;
-
-  let settings = await Settings.findOne(filter);
+export const getSettings = async (): Promise<ISettingsDocument> => {
+  let settings = await Settings.findOne({});
   if (!settings) {
-    settings = await Settings.create(filter);
+    settings = await Settings.create({});
+  } else if (!settings.benefits || settings.benefits.length === 0) {
+    settings.benefits = DEFAULT_BENEFITS;
+    await settings.save();
   }
   return settings;
 };

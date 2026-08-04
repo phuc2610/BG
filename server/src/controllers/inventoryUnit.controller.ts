@@ -32,8 +32,7 @@ export class InventoryUnitController {
     const productId = Array.isArray(req.params.productId)
       ? req.params.productId[0]
       : req.params.productId;
-    const ownerId = req.user?.id || req.query?.ownerId;
-    const units = await unitService.getUnitsByProduct(productId, ownerId);
+    const units = await unitService.getUnitsByProduct(productId);
     res.json({ success: true, data: units });
   });
 

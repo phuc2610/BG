@@ -1,15 +1,15 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { ISettings } from '../types';
+import mongoose, { Document } from 'mongoose';
+import { ISettings, IBenefitItem } from '../types';
 export interface ISettingsDocument extends ISettings, Document {
-    ownerId?: Schema.Types.ObjectId;
 }
+export declare const DEFAULT_BENEFITS: IBenefitItem[];
 export declare const Settings: mongoose.Model<ISettingsDocument, {}, {}, {}, mongoose.Document<unknown, {}, ISettingsDocument, {}, {}> & ISettingsDocument & Required<{
     _id: mongoose.Types.ObjectId;
 }> & {
     __v: number;
 }, any>;
 /**
- * Get or create default settings per owner
+ * Get or create global default settings
  */
-export declare const getSettings: (ownerId?: any) => Promise<ISettingsDocument>;
+export declare const getSettings: () => Promise<ISettingsDocument>;
 //# sourceMappingURL=settings.model.d.ts.map

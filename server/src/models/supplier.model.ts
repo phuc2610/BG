@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ISupplierDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   supplierCode: string;
   name: string;
   companyName?: string;
@@ -25,14 +24,10 @@ export interface ISupplierDocument extends Document {
 
 const supplierSchema = new Schema<ISupplierDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     supplierCode: {
       type: String,
       required: true,
+      unique: true,
     },
     name: {
       type: String,
@@ -69,8 +64,6 @@ const supplierSchema = new Schema<ISupplierDocument>(
   }
 );
 
-supplierSchema.index({ ownerId: 1, supplierCode: 1 }, { unique: true });
-
 supplierSchema.index({
   supplierCode: 'text',
   name: 'text',
@@ -81,13 +74,10 @@ supplierSchema.index({
 export const Supplier = mongoose.model<ISupplierDocument>('Supplier', supplierSchema);
 
 /**
- * Generates supplier code formatted: NCC000001, NCC000002... per owner
+ * Generates supplier code formatted: NCC000001, NCC000002...
  */
-export async function generateSupplierCode(ownerId?: any): Promise<string> {
-  const filter: any = { supplierCode: /^NCC\d+/ };
-  if (ownerId) filter.ownerId = ownerId;
-
-  const latest = await Supplier.findOne(filter)
+export async function generateSupplierCode(): Promise<string> {
+  const latest = await Supplier.findOne({ supplierCode: /^NCC\d+/ })
     .sort({ supplierCode: -1 })
     .exec();
 

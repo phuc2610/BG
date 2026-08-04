@@ -15,8 +15,6 @@ class SupplierRepository extends base_repository_1.BaseRepository {
         const isHasDebtOnly = hasDebtOnly === true || String(hasDebtOnly) === 'true';
         if (isHasDebtOnly)
             filter.totalDebt = { $gt: 0 };
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         if (search && search.trim()) {
             const searchRegex = new RegExp(search.trim(), 'i');
             filter.$or = [
@@ -49,11 +47,8 @@ class SupplierRepository extends base_repository_1.BaseRepository {
             },
         };
     }
-    async getStats(ownerId) {
-        const filter = {};
-        if (ownerId)
-            filter.ownerId = ownerId;
-        const suppliers = await this.model.find(filter).exec();
+    async getStats() {
+        const suppliers = await this.model.find({}).exec();
         let totalPurchased = 0;
         let totalPaid = 0;
         let totalDebt = 0;

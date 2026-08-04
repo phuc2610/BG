@@ -3,16 +3,12 @@ import { ICustomer } from '../types';
 export declare class CustomerService {
     getAll(query: any): Promise<import("../types").PaginatedResponse<ICustomerDocument>>;
     getById(id: string): Promise<ICustomerDocument>;
-    getStats(ownerId?: string): Promise<import("../types").CustomerStats>;
+    getStats(): Promise<import("../types").CustomerStats>;
     /**
      * Auto-links or creates a customer by Phone number or Name to prevent duplicate records.
      */
-    findOrCreateCustomer(data: Partial<ICustomer> & {
-        ownerId?: string;
-    }, createdBy?: string, ownerId?: string): Promise<ICustomerDocument>;
-    create(data: Partial<ICustomer> & {
-        ownerId?: string;
-    }, createdBy?: string, ownerId?: string): Promise<ICustomerDocument>;
+    findOrCreateCustomer(data: Partial<ICustomer>, createdBy?: string): Promise<ICustomerDocument>;
+    create(data: Partial<ICustomer>, createdBy?: string): Promise<ICustomerDocument>;
     update(id: string, data: Partial<ICustomerDocument>): Promise<ICustomerDocument>;
     delete(id: string): Promise<ICustomerDocument | null>;
     /**

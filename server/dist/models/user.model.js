@@ -62,6 +62,11 @@ const UserSchema = new mongoose_1.Schema({
         trim: true,
         lowercase: true,
     },
+    fullName: {
+        type: String,
+        default: 'Admin',
+        trim: true,
+    },
     passwordHash: {
         type: String,
         required: true,
@@ -79,6 +84,14 @@ const UserSchema = new mongoose_1.Schema({
     isActive: {
         type: Boolean,
         default: false,
+    },
+    permissions: {
+        type: [String],
+        default: [],
+    },
+    maxQuoteDiscountPercent: {
+        type: Number,
+        default: 0,
     },
     registeredAt: {
         type: Date,

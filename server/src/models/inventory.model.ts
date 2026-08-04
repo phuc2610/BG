@@ -1,8 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ProductCondition, ProductCategory, IProductSpecs } from '../types';
+import { ProductCondition } from '../types';
 
 export interface IInventoryDocument extends Document {
-  ownerId?: Schema.Types.ObjectId;
   stockCode: string;
   product: mongoose.Types.ObjectId;
   condition: ProductCondition;
@@ -33,14 +32,10 @@ export interface IInventoryDocument extends Document {
 
 const inventorySchema = new Schema<IInventoryDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     stockCode: {
       type: String,
       required: true,
+      unique: true,
     },
     product: {
       type: Schema.Types.ObjectId,
@@ -109,8 +104,6 @@ const inventorySchema = new Schema<IInventoryDocument>(
   }
 );
 
-inventorySchema.index({ ownerId: 1, stockCode: 1 }, { unique: true });
-
 inventorySchema.index({
   stockCode: 'text',
   serialNumber: 'text',
@@ -121,5 +114,3 @@ inventorySchema.index({
 });
 
 export const Inventory = mongoose.model<IInventoryDocument>('Inventory', inventorySchema);
-
-

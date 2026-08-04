@@ -1,5 +1,5 @@
 import { SupplierRepository, PurchaseRepository, InventoryUnitRepository } from '../repositories';
-import { Supplier, generateSupplierCode, ISupplierDocument, Purchase } from '../models';
+import { Supplier, generateSupplierCode, ISupplierDocument } from '../models';
 import { ISupplier, SupplierFilterQuery } from '../types';
 import { AppError } from './product.service';
 
@@ -18,19 +18,18 @@ export class SupplierService {
     return supplier;
   }
 
-  async getStats(ownerId?: string) {
-    return supplierRepo.getStats(ownerId);
+  async getStats() {
+    return supplierRepo.getStats();
   }
 
-  async create(data: Partial<ISupplier> & { ownerId?: string }) {
+  async create(data: Partial<ISupplier>) {
     if (!data.name || !data.name.trim()) {
       throw new AppError('Tên nhà cung cấp là bắt buộc', 400);
     }
 
-    const supplierCode = await generateSupplierCode(data.ownerId);
+    const supplierCode = await generateSupplierCode();
 
     const supplier = await supplierRepo.create({
-      ownerId: data.ownerId as any,
       supplierCode,
       name: data.name.trim(),
       companyName: data.companyName?.trim(),

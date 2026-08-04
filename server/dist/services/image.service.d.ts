@@ -1,10 +1,15 @@
+/**
+ * Sanitizes SVG XML string to remove dangerous tags, script execution, and inline event listeners.
+ */
+export declare function sanitizeSvgBuffer(buffer: Buffer): Buffer;
 export declare class ImageService {
     private uploadsDir;
     constructor();
     /**
-     * Upload image buffer to Cloudinary with automatic local disk fallback on failure
+     * Upload image buffer to Cloudinary with automatic local disk fallback.
+     * Preserves SVG vector format if input is SVG.
      */
-    upload(buffer: Buffer, folder?: string): Promise<{
+    upload(buffer: Buffer, folder?: string, originalName?: string): Promise<{
         url: string;
         publicId: string;
     }>;
@@ -24,9 +29,9 @@ export declare class ImageService {
      */
     deleteMultiple(publicIds: string[]): Promise<void>;
     /**
-     * Upload logo or QR image (settings)
+     * Upload brand setting images (logo, qr, signature, stamp, thankYou)
      */
-    uploadSettingsImage(buffer: Buffer, type: 'logo' | 'qr'): Promise<{
+    uploadSettingsImage(buffer: Buffer, type: 'logo' | 'qr' | 'signature' | 'stamp' | 'thankYou', originalName?: string): Promise<{
         url: string;
         publicId: string;
     }>;

@@ -33,24 +33,58 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSettings = exports.Settings = void 0;
+exports.getSettings = exports.Settings = exports.DEFAULT_BENEFITS = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const settingsSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
+exports.DEFAULT_BENEFITS = [
+    {
+        id: 'b1',
+        enabled: true,
+        title: 'Sản phẩm chính hãng',
+        description: '100% chính hãng,\nđầy đủ hóa đơn VAT.',
+        sortOrder: 1,
     },
+    {
+        id: 'b2',
+        enabled: true,
+        title: 'Đổi trả linh hoạt',
+        description: 'Hỗ trợ đổi trả trong\n7 ngày nếu có lỗi.',
+        sortOrder: 2,
+    },
+    {
+        id: 'b3',
+        enabled: true,
+        title: 'Bảo hành uy tín',
+        description: 'Bảo hành theo hãng,\nhỗ trợ tận tâm.',
+        sortOrder: 3,
+    },
+    {
+        id: 'b4',
+        enabled: true,
+        title: 'Hỗ trợ nhanh chóng',
+        description: 'Tư vấn 24/7,\ngiải đáp tận tình.',
+        sortOrder: 4,
+    },
+];
+const settingsSchema = new mongoose_1.Schema({
     storeName: { type: String, default: 'NP Computer' },
+    tagline: { type: String, default: 'LINH KIỆN • PC GAMING • WORKSTATION' },
     hotline: { type: String, default: '0123.456.789' },
-    website: { type: String, default: '' },
-    facebook: { type: String, default: '' },
-    address: { type: String, default: '' },
-    email: { type: String, default: '' },
+    website: { type: String, default: 'npcomputer.vn' },
+    facebook: { type: String, default: 'facebook.com/npcomputer.vn' },
+    address: { type: String, default: '130' },
+    email: { type: String, default: 'thanh.nguyen@example.com' },
     logoUrl: { type: String, default: '' },
     logoPublicId: { type: String, default: '' },
     qrPaymentUrl: { type: String, default: '' },
     qrPaymentPublicId: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
+    signaturePublicId: { type: String, default: '' },
+    stampUrl: { type: String, default: '' },
+    stampPublicId: { type: String, default: '' },
+    thankYouAssetUrl: { type: String, default: '' },
+    thankYouAssetPublicId: { type: String, default: '' },
+    signerName: { type: String, default: 'NP Computer' },
+    signerTitle: { type: String, default: 'XÁC NHẬN BÁO GIÁ / HÓA ĐƠN' },
     bankInfo: { type: String, default: '' },
     terms: {
         type: [String],
@@ -62,6 +96,18 @@ const settingsSchema = new mongoose_1.Schema({
             'Báo giá có hiệu lực trong 7 ngày kể từ ngày lập.',
         ],
     },
+    benefits: {
+        type: [
+            {
+                id: { type: String, required: true },
+                enabled: { type: Boolean, default: true },
+                title: { type: String, default: '' },
+                description: { type: String, default: '' },
+                sortOrder: { type: Number, default: 1 },
+            },
+        ],
+        default: exports.DEFAULT_BENEFITS,
+    },
     footerText: {
         type: String,
         default: 'Cảm ơn quý khách đã tin tưởng và lựa chọn NP Computer! 🙏',
@@ -71,15 +117,16 @@ const settingsSchema = new mongoose_1.Schema({
 });
 exports.Settings = mongoose_1.default.model('Settings', settingsSchema);
 /**
- * Get or create default settings per owner
+ * Get or create global default settings
  */
-const getSettings = async (ownerId) => {
-    const filter = {};
-    if (ownerId)
-        filter.ownerId = ownerId;
-    let settings = await exports.Settings.findOne(filter);
+const getSettings = async () => {
+    let settings = await exports.Settings.findOne({});
     if (!settings) {
-        settings = await exports.Settings.create(filter);
+        settings = await exports.Settings.create({});
+    }
+    else if (!settings.benefits || settings.benefits.length === 0) {
+        settings.benefits = exports.DEFAULT_BENEFITS;
+        await settings.save();
     }
     return settings;
 };

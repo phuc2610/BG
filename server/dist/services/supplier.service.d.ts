@@ -3,10 +3,8 @@ import { ISupplier, SupplierFilterQuery } from '../types';
 export declare class SupplierService {
     getAll(query: SupplierFilterQuery): Promise<import("../types").PaginatedResponse<ISupplierDocument>>;
     getById(id: string): Promise<ISupplierDocument>;
-    getStats(ownerId?: string): Promise<import("../types").SupplierStats>;
-    create(data: Partial<ISupplier> & {
-        ownerId?: string;
-    }): Promise<ISupplierDocument>;
+    getStats(): Promise<import("../types").SupplierStats>;
+    create(data: Partial<ISupplier>): Promise<ISupplierDocument>;
     update(id: string, data: Partial<ISupplierDocument>): Promise<ISupplierDocument>;
     delete(id: string): Promise<ISupplierDocument | null>;
     /**

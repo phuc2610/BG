@@ -6,7 +6,7 @@ import { QuoteStatus } from '@/types';
 import {
   Search, Plus, FileText, ChevronLeft, ChevronRight,
   MoreHorizontal, Edit, Trash2, Download, Send, Check,
-  XCircle, X, Loader2,
+  XCircle, X, Loader2, Printer,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -52,18 +52,25 @@ export function Quotes() {
     setDownloading(id);
     try {
       const res = await api.get(`/pdf/quotes/${id}`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.download = `${quoteCode}.pdf`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success('Đã tải PDF');
+      toast.success('Đã tải PDF báo giá');
     } catch {
       toast.error('Không thể tải PDF');
     } finally {
       setDownloading(null);
     }
+  };
+
+  const handlePrintQuote = (id: string) => {
+    const apiUrl = import.meta.env.VITE_API_URL || '/api';
+    window.open(`${apiUrl}/pdf/quotes/${id}/html`, '_blank');
   };
 
   const statusTabs = [
@@ -197,6 +204,13 @@ export function Quotes() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => handlePrintQuote(quote._id)}
+                    className="p-2 rounded-lg hover:bg-blue-500/10 transition-smooth text-blue-500"
+                    title="In Báo Giá Trực Tiếp"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => handleDownloadPdf(quote._id, quote.quoteCode)}
                     disabled={downloading === quote._id}

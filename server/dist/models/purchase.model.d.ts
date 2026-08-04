@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 import { PaymentMethod, ProductCondition } from '../types';
 export interface ISupplierPaymentDocument {
     paymentCode: string;
@@ -22,7 +22,6 @@ export interface IPurchaseItemDocument {
     total: number;
 }
 export interface IPurchaseDocument extends Document {
-    ownerId?: Schema.Types.ObjectId;
     purchaseCode: string;
     supplierId: mongoose.Types.ObjectId;
     supplier: {
@@ -48,7 +47,7 @@ export declare const Purchase: mongoose.Model<IPurchaseDocument, {}, {}, {}, mon
     __v: number;
 }, any>;
 /**
- * Generates purchase code formatted: PNYYYYMM0001 per owner
+ * Generates purchase code formatted: PNYYYYMM0001
  */
-export declare function generatePurchaseCode(ownerId?: any): Promise<string>;
+export declare function generatePurchaseCode(): Promise<string>;
 //# sourceMappingURL=purchase.model.d.ts.map

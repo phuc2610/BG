@@ -24,7 +24,6 @@ export class SupplierRepository extends BaseRepository<ISupplierDocument> {
     if (status) filter.status = status;
     const isHasDebtOnly = hasDebtOnly === true || String(hasDebtOnly) === 'true';
     if (isHasDebtOnly) filter.totalDebt = { $gt: 0 };
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     if (search && search.trim()) {
       const searchRegex = new RegExp(search.trim(), 'i');
@@ -63,10 +62,8 @@ export class SupplierRepository extends BaseRepository<ISupplierDocument> {
     };
   }
 
-  async getStats(ownerId?: string): Promise<SupplierStats> {
-    const filter: any = {};
-    if (ownerId) filter.ownerId = ownerId;
-    const suppliers = await this.model.find(filter).exec();
+  async getStats(): Promise<SupplierStats> {
+    const suppliers = await this.model.find({}).exec();
 
     let totalPurchased = 0;
     let totalPaid = 0;

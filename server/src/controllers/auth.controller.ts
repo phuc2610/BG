@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'np_computer_jwt_secret_key_2026';
 export class AuthController {
   // POST /api/auth/register
   register = asyncHandler(async (req: Request, res: Response) => {
-    const { username, password, confirmPassword } = req.body;
+    const { username, fullName, password, confirmPassword } = req.body;
 
     if (!username || typeof username !== 'string') {
       return res.status(400).json({ success: false, message: 'Tên đăng nhập không được để trống' });
@@ -49,6 +49,7 @@ export class AuthController {
     await User.create({
       username: trimmedUsername,
       usernameNormalized,
+      fullName: (fullName && typeof fullName === 'string' && fullName.trim()) ? fullName.trim() : 'Admin',
       passwordHash,
       role: UserRole.USER,
       status: UserStatus.PENDING,
@@ -104,6 +105,10 @@ export class AuthController {
       });
     }
 
+    if (!user.fullName) {
+      user.fullName = 'Admin';
+    }
+
     user.lastLoginAt = new Date();
     await user.save();
 
@@ -115,7 +120,7 @@ export class AuthController {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: false, // Set to true in production SSL
+      secure: false,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -126,8 +131,11 @@ export class AuthController {
         user: {
           id: user._id.toString(),
           username: user.username,
+          fullName: user.fullName || 'Admin',
           role: user.role,
           status: user.status,
+          permissions: user.role === UserRole.ADMIN ? ['*'] : (user.permissions || []),
+          maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,
         },
       },
     });
@@ -169,6 +177,10 @@ export class AuthController {
       });
     }
 
+    if (!user.fullName) {
+      user.fullName = 'Admin';
+    }
+
     user.lastLoginAt = new Date();
     await user.save();
 
@@ -191,8 +203,11 @@ export class AuthController {
         user: {
           id: user._id.toString(),
           username: user.username,
+          fullName: user.fullName || 'Admin',
           role: user.role,
           status: user.status,
+          permissions: ['*'],
+          maxQuoteDiscountPercent: 100,
         },
       },
     });
@@ -204,7 +219,59 @@ export class AuthController {
       return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
     }
     const user = await User.findById(req.user.id).select('-passwordHash').exec();
+    if (user && !user.fullName) {
+      user.fullName = 'Admin';
+      await user.save();
+    }
     return res.json({ success: true, data: user });
+  });
+
+  // PUT /api/auth/profile
+  updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+    }
+
+    const { fullName, oldPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+    }
+
+    if (fullName && typeof fullName === 'string' && fullName.trim()) {
+      user.fullName = fullName.trim();
+    }
+
+    if (newPassword) {
+      if (!oldPassword) {
+        return res.status(400).json({ success: false, message: 'Vui lòng nhập mật khẩu cũ để đổi mật khẩu' });
+      }
+      const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Mật khẩu cũ không chính xác' });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
+      }
+      user.passwordHash = await bcrypt.hash(newPassword, 10);
+    }
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Cập nhật thông tin cá nhân thành công',
+      data: {
+        id: user._id.toString(),
+        username: user.username,
+        fullName: user.fullName || 'Admin',
+        role: user.role,
+        status: user.status,
+        permissions: user.role === UserRole.ADMIN ? ['*'] : (user.permissions || []),
+        maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,
+      },
+    });
   });
 
   // POST /api/auth/logout

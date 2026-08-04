@@ -3,12 +3,12 @@ import { PaymentMethod } from '../types';
 export declare class InvoiceService {
     getAll(query: any): Promise<import("../types").PaginatedResponse<IInvoiceDocument>>;
     getById(id: string): Promise<IInvoiceDocument>;
-    getStats(ownerId?: string): Promise<import("../types").InvoiceStats>;
+    getStats(): Promise<import("../types").InvoiceStats>;
     /**
      * Creates a new DRAFT Invoice by copying data from a confirmed Quote.
      * Does NOT reduce stock or reserve serials yet.
      */
-    createFromQuote(quoteId: string, createdBy?: string, ownerId?: string): Promise<IInvoiceDocument>;
+    createFromQuote(quoteId: string, createdBy?: string): Promise<IInvoiceDocument>;
     /**
      * Selects and reserves serials for a draft invoice item line.
      * Reverts unselected serials to AVAILABLE and sets selected serials to RESERVED.

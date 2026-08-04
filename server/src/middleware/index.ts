@@ -69,3 +69,4 @@ export const asyncHandler = (fn: (req: Request, res: Response, next: NextFunctio
 };
 
 export * from './auth.middleware';
+export * from './fieldSecurity.middleware';

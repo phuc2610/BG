@@ -7,7 +7,7 @@ export declare class DebtService {
     /**
      * Calculates overall debt statistics for the Dashboard.
      */
-    getDebtStats(ownerId?: string): Promise<DebtStats>;
+    getDebtStats(): Promise<DebtStats>;
     /**
      * Record debt payment for an invoice.
      */

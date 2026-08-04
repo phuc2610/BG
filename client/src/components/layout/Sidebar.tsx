@@ -18,25 +18,26 @@ import {
   ChevronRight,
   Monitor,
   LogOut,
+  ShieldAlert,
 } from 'lucide-react';
 
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/customers', label: 'Khách Hàng', icon: Users },
-  { path: '/suppliers', label: 'Nhà Cung Cấp', icon: Building2 },
-  { path: '/purchases', label: 'Nhập Hàng', icon: Truck },
-  { path: '/products', label: 'Mã Sản Phẩm', icon: Package },
-  { path: '/inventory', label: 'Tồn Kho (Mã SP)', icon: Warehouse },
-  { path: '/supplier-warranties', label: 'Bảo Hành NCC', icon: ShieldCheck },
-  { path: '/quotes', label: 'Báo Giá', icon: FileText },
-  { path: '/invoices', label: 'Hóa Đơn', icon: Receipt },
-  { path: '/debts', label: 'Công Nợ Khách', icon: Scale },
-  { path: '/settings', label: 'Cài Đặt', icon: Settings },
+const navItemsConfig = [
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  { path: '/customers', label: 'Khách Hàng', icon: Users, permission: 'customer.view' },
+  { path: '/suppliers', label: 'Nhà Cung Cấp', icon: Building2, permission: 'supplier.view' },
+  { path: '/purchases', label: 'Nhập Hàng', icon: Truck, permission: 'purchase.view' },
+  { path: '/products', label: 'Mã Sản Phẩm', icon: Package, permission: 'product.view' },
+  { path: '/inventory', label: 'Tồn Kho (Mã SP)', icon: Warehouse, permission: 'inventory.view' },
+  { path: '/supplier-warranties', label: 'Bảo Hành NCC', icon: ShieldCheck, permission: 'warranty.supplier.view' },
+  { path: '/quotes', label: 'Báo Giá', icon: FileText, permission: 'quote.view' },
+  { path: '/invoices', label: 'Hóa Đơn', icon: Receipt, permission: 'invoice.view' },
+  { path: '/debts', label: 'Công Nợ Khách', icon: Scale, permission: 'customer.debt.view' },
+  { path: '/settings', label: 'Cài Đặt', icon: Settings, permission: 'settings.view' },
 ];
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
-  const { user, logout } = useAuthStore();
+  const { user, logout, hasPermission } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -44,6 +45,17 @@ export function Sidebar() {
     await logout();
     navigate('/login');
   };
+
+  const visibleNavItems = navItemsConfig.filter((item) => hasPermission(item.permission));
+
+  if (user?.role === 'ADMIN') {
+    visibleNavItems.push({
+      path: '/admin',
+      label: 'Quản Trị Hệ Thống',
+      icon: ShieldAlert,
+      permission: '*',
+    });
+  }
 
   return (
     <aside
@@ -64,7 +76,7 @@ export function Sidebar() {
               NP Computer
             </h1>
             <p className="text-[10px] text-[rgb(var(--muted-foreground))] -mt-0.5">
-              Quote Manager
+              Kho Chung & Phân Quyền
             </p>
           </div>
         )}
@@ -72,7 +84,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === '/'
             : location.pathname.startsWith(item.path);
@@ -107,7 +119,9 @@ export function Sidebar() {
           <div className="px-2 py-1.5 rounded-xl bg-[rgb(var(--muted))/50] flex items-center justify-between text-xs">
             <div className="truncate">
               <div className="font-bold text-[rgb(var(--foreground))] truncate">{user?.username || 'User'}</div>
-              <div className="text-[10px] text-emerald-500 font-semibold">Tài khoản Active</div>
+              <div className="text-[10px] text-emerald-500 font-semibold">
+                {user?.role === 'ADMIN' ? 'Admin Toàn Quyền' : 'Tài khoản Active'}
+              </div>
             </div>
             <button
               onClick={handleLogout}

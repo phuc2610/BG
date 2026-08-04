@@ -11,10 +11,13 @@ export declare enum UserStatus {
 export interface IUserDocument extends Document {
     username: string;
     usernameNormalized: string;
+    fullName: string;
     passwordHash: string;
     role: UserRole;
     status: UserStatus;
     isActive: boolean;
+    permissions: string[];
+    maxQuoteDiscountPercent: number;
     registeredAt: Date;
     activatedAt?: Date;
     lastLoginAt?: Date;

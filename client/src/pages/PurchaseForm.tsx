@@ -122,13 +122,15 @@ export function PurchaseForm() {
     }
   };
 
+  const getPid = (p: any) => typeof p?._id === 'string' ? p._id : (p?._id?.toString() || p?.id || String(p?._id || ''));
+
   const handleProductSelect = (index: number, pId: string) => {
-    const prod = products.find((p) => p._id === pId);
+    const prod = products.find((p) => getPid(p) === pId);
     const updated = [...items];
     if (prod) {
       updated[index] = {
         ...updated[index],
-        productId: prod._id,
+        productId: getPid(prod),
         productName: prod.name,
         productCode: prod.productCode,
       };
@@ -382,11 +384,14 @@ export function PurchaseForm() {
                       className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
                     >
                       <option value="">-- Chọn sản phẩm có sẵn --</option>
-                      {products.map((p) => (
-                        <option key={p._id} value={p._id}>
-                          [{p.productCode}] {p.name}
-                        </option>
-                      ))}
+                      {products.map((p) => {
+                        const pid = getPid(p);
+                        return (
+                          <option key={pid} value={pid}>
+                            [{p.productCode}] {p.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 

@@ -40,40 +40,39 @@ const counterSchema = new mongoose_1.Schema({
     seq: { type: Number, default: 0 },
 });
 exports.Counter = mongoose_1.default.model('Counter', counterSchema);
-const getNextSequence = async (name, ownerId) => {
-    const counterName = ownerId ? `${name}_${ownerId}` : name;
-    const counter = await exports.Counter.findOneAndUpdate({ name: counterName }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+const getNextSequence = async (name) => {
+    const counter = await exports.Counter.findOneAndUpdate({ name }, { $inc: { seq: 1 } }, { new: true, upsert: true });
     return counter.seq;
 };
 exports.getNextSequence = getNextSequence;
-const generateProductId = async (ownerId) => {
-    const seq = await (0, exports.getNextSequence)('productId', ownerId);
+const generateProductId = async () => {
+    const seq = await (0, exports.getNextSequence)('productId');
     return `SP${String(seq).padStart(6, '0')}`;
 };
 exports.generateProductId = generateProductId;
-const generateProductCode = async (category, ownerId) => {
+const generateProductCode = async (category) => {
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const counterName = `productCode_${category}_${yy}${mm}`;
-    const seq = await (0, exports.getNextSequence)(counterName, ownerId);
+    const seq = await (0, exports.getNextSequence)(counterName);
     const categoryCode = category.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
     return `NPC-${categoryCode}-${yy}${mm}${String(seq).padStart(4, '0')}`;
 };
 exports.generateProductCode = generateProductCode;
-const generateQuoteCode = async (ownerId) => {
+const generateQuoteCode = async () => {
     const now = new Date();
     const yyyy = String(now.getFullYear());
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     const dateStr = `${yyyy}${mm}${dd}`;
     const counterName = `quoteCode_${dateStr}`;
-    const seq = await (0, exports.getNextSequence)(counterName, ownerId);
+    const seq = await (0, exports.getNextSequence)(counterName);
     return `BG${dateStr}${String(seq).padStart(4, '0')}`;
 };
 exports.generateQuoteCode = generateQuoteCode;
-const generateStockCode = async (ownerId) => {
-    const seq = await (0, exports.getNextSequence)('stockCode', ownerId);
+const generateStockCode = async () => {
+    const seq = await (0, exports.getNextSequence)('stockCode');
     return `NK${String(seq).padStart(6, '0')}`;
 };
 exports.generateStockCode = generateStockCode;

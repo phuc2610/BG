@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PdfService = void 0;
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const models_1 = require("../models");
+const types_1 = require("../types");
+const numberToWords_1 = require("../utils/numberToWords");
 class PdfService {
     async generateQuotePdf(quote) {
         const settings = await (0, models_1.getSettings)();
@@ -49,10 +51,20 @@ class PdfService {
             await browser.close();
         }
     }
+    async getQuoteHtml(quote) {
+        const settings = await (0, models_1.getSettings)();
+        return this.buildHtml(quote, settings);
+    }
+    async getInvoiceHtml(invoice) {
+        const settings = await (0, models_1.getSettings)();
+        return this.buildInvoiceHtml(invoice, settings);
+    }
     formatCurrency(amount) {
         return new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
     }
     formatDate(date) {
+        if (!date)
+            return '';
         return new Intl.DateTimeFormat('vi-VN', {
             day: '2-digit',
             month: '2-digit',
@@ -111,58 +123,967 @@ class PdfService {
             bankSlug = 'vietinbank';
         else if (bLower.includes('bidv'))
             bankSlug = 'bidv';
-        else if (bLower.includes('vpbank') || bLower.includes('vpb'))
+        else if (bLower.includes('vp'))
             bankSlug = 'vpbank';
         else if (bLower.includes('acb'))
             bankSlug = 'acb';
-        else if (bLower.includes('tpbank') || bLower.includes('tpb'))
+        else if (bLower.includes('tp'))
             bankSlug = 'tpbank';
-        else if (bLower.includes('sacom') || bLower.includes('stb'))
+        else if (bLower.includes('sacom'))
             bankSlug = 'sacombank';
-        else if (bLower.includes('agri') || bLower.includes('vba'))
-            bankSlug = 'agribank';
-        else if (bLower.includes('msb'))
-            bankSlug = 'msb';
-        else if (bLower.includes('ocb'))
-            bankSlug = 'ocb';
-        else if (bLower.includes('mb'))
-            bankSlug = 'MB';
         return {
-            bankSlug,
-            bankName: bankName || 'MB Bank',
+            bankName: bankName || 'Ngân hàng',
             accountNo,
-            accountName,
+            accountName: accountName || 'NP COMPUTER',
+            bankSlug,
         };
     }
-    generateVietQR(quote, settings) {
+    generateQuoteVietQR(quote, settings) {
         const customerName = quote.customer?.name || '';
         const phonePart = quote.customer?.phone ? ` - ${quote.customer.phone}` : '';
-        const quoteCodePart = quote.quoteCode ? ` - ${quote.quoteCode}` : '';
-        const transferMemo = `${customerName}${phonePart}${quoteCodePart}`;
+        const codePart = quote.quoteCode ? ` - ${quote.quoteCode}` : '';
+        const transferMemo = `${customerName}${phonePart}${codePart}`;
         const parsed = this.parseBankInfo(settings?.bankInfo || '');
         if (!parsed) {
             return {
                 qrUrl: settings?.qrPaymentUrl || '',
-                bankName: 'Ngân hàng',
+                bankName: 'MB Bank',
                 accountNo: '',
-                accountName: '',
+                accountName: settings?.storeName || 'NP COMPUTER',
                 transferMemo,
             };
         }
-        const amount = quote.grandTotal || 0;
-        const accountNameParam = parsed.accountName ? `&accountName=${encodeURIComponent(parsed.accountName)}` : '';
-        const qrUrl = `https://img.vietqr.io/image/${parsed.bankSlug}-${parsed.accountNo}-qr_only.png?amount=${amount}&addInfo=${encodeURIComponent(transferMemo)}${accountNameParam}`;
         return {
-            qrUrl,
+            qrUrl: `https://img.vietqr.io/image/${parsed.bankSlug}-${parsed.accountNo}-compact2.png?amount=${quote.grandTotal}&addInfo=${encodeURIComponent(transferMemo)}&accountName=${encodeURIComponent(parsed.accountName)}`,
             bankName: parsed.bankName,
             accountNo: parsed.accountNo,
             accountName: parsed.accountName,
             transferMemo,
         };
     }
+    generateInvoiceVietQR(invoice, settings) {
+        const customerName = invoice.customer?.name || '';
+        const phonePart = invoice.customer?.phone ? ` - ${invoice.customer.phone}` : '';
+        const invoiceCodePart = invoice.invoiceCode ? ` - ${invoice.invoiceCode}` : '';
+        const transferMemo = `${customerName}${phonePart}${invoiceCodePart}`;
+        const parsed = this.parseBankInfo(settings?.bankInfo || '');
+        const amount = invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.grandTotal;
+        if (!parsed) {
+            return {
+                qrUrl: settings?.qrPaymentUrl || '',
+                bankName: 'MB Bank',
+                accountNo: '',
+                accountName: settings?.storeName || 'NP COMPUTER',
+                transferMemo,
+            };
+        }
+        return {
+            qrUrl: `https://img.vietqr.io/image/${parsed.bankSlug}-${parsed.accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferMemo)}&accountName=${encodeURIComponent(parsed.accountName)}`,
+            bankName: parsed.bankName,
+            accountNo: parsed.accountNo,
+            accountName: parsed.accountName,
+            transferMemo,
+        };
+    }
+    /**
+     * Common CSS styles for both Quote and Invoice A4 documents
+     * Usable width: 190mm (210mm - 2*10mm padding)
+     */
+    getCommonCss() {
+        return `
+      @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,700&family=Manrope:wght@700;800&display=swap');
+
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: 'Be Vietnam Pro', Arial, sans-serif;
+        background: #ffffff;
+        color: #14213D;
+        font-size: 10px;
+        line-height: 1.4;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .page-container {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 10mm 10mm 12mm 10mm;
+        margin: 0 auto;
+        background: #ffffff;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+      }
+      .doc-body-wrap {
+        flex: 1 0 auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .doc-footer-wrap {
+        margin-top: auto;
+        flex-shrink: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      /* ===== SHARED HEADER (66% / 34%) - 38mm FULL BLEED ===== */
+      .doc-header {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        margin-top: -10mm;
+        margin-left: -10mm;
+        margin-right: -10mm;
+        margin-bottom: 12px;
+        height: 38mm;
+        width: calc(100% + 20mm);
+        background: #F5F8FC;
+        overflow: hidden;
+      }
+      .brand-block {
+        width: 66%;
+        height: 38mm;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: 10mm;
+        padding-right: 14px;
+        background: #F5F8FC;
+        box-sizing: border-box;
+      }
+      .brand-top {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .brand-logo {
+        height: 88px;
+        width: 88px;
+        max-width: 90px;
+        max-height: 90px;
+        object-fit: contain;
+        flex-shrink: 0;
+        background: transparent;
+      }
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .brand-title {
+        font-family: 'Be Vietnam Pro', sans-serif;
+        font-size: 25px;
+        font-weight: 800;
+        color: #07152F;
+        line-height: 1.1;
+        letter-spacing: -0.3px;
+      }
+      .brand-tagline {
+        font-family: 'Be Vietnam Pro', sans-serif;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #0755D9;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-top: 3px;
+      }
+
+      /* ===== SHARED BANNER BOX (34% - FLUSH RIGHT NO GAP) ===== */
+      .banner-box {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 34%;
+        height: 38mm;
+        background: linear-gradient(135deg, #1260E8 0%, #064BC4 100%);
+        clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%);
+        padding: 4px 14px;
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        box-sizing: border-box;
+        z-index: 2;
+      }
+      .banner-title {
+        font-family: 'Be Vietnam Pro', sans-serif;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+        color: #ffffff;
+      }
+      .code-pill {
+        background: #ffffff;
+        color: #07152F;
+        font-family: 'Be Vietnam Pro', sans-serif;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 4px 14px;
+        border-radius: 7px;
+        display: inline-block;
+        margin-bottom: 4px;
+        box-shadow: none;
+      }
+      .banner-meta {
+        font-family: 'Be Vietnam Pro', sans-serif;
+        font-size: 9px;
+        color: #ffffff;
+        opacity: 0.95;
+        line-height: 1.35;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+      }
+      .banner-meta-item {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      /* ===== CUSTOMER CARD (1.3X ENLARGED & SPACIOUS LAYOUT) ===== */
+      .customer-card {
+        background: #F8FAFD;
+        border: 1px solid #DCE6F3;
+        border-radius: 9px;
+        padding: 16px 18px;
+        margin-top: 16px;
+        margin-bottom: 16px;
+        box-shadow: none;
+      }
+      .customer-grid {
+        display: flex;
+        align-items: center;
+        width: 100%;
+      }
+      .customer-col-1 {
+        width: 42%;
+        flex-shrink: 0;
+      }
+      .customer-col-2 {
+        width: 38%;
+        flex-shrink: 0;
+        margin-left: 38px;
+      }
+      .customer-col-status {
+        width: 20%;
+        flex-shrink: 0;
+        margin-left: auto;
+        border-left: 1px solid #D5DFED;
+        padding-left: 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        box-sizing: border-box;
+      }
+      .info-item {
+        display: flex;
+        align-items: center;
+        font-size: 11px;
+        line-height: 1.45;
+        margin-bottom: 10px;
+      }
+      .info-item:last-child {
+        margin-bottom: 0;
+      }
+      .info-icon {
+        width: 15px;
+        height: 15px;
+        color: #0755D9;
+        flex-shrink: 0;
+        stroke-width: 2.2;
+        margin-right: 8px;
+      }
+      .info-label {
+        color: #475467;
+        font-size: 10.5px;
+        font-weight: 500;
+        flex-shrink: 0;
+        margin-right: 14px;
+      }
+      .info-val {
+        color: #101828;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      /* ===== PRODUCT TABLE (30-POINT EXACT SPECIFICATION MATCH) ===== */
+      :root {
+        --invoice-primary: #0B4FD4;
+        --invoice-primary-dark: #073EA8;
+        --invoice-text: #07152F;
+        --invoice-text-secondary: #334155;
+        --invoice-text-muted: #64748B;
+        --invoice-border: #DCE6F4;
+        --invoice-border-light: #E0E8F3;
+        --invoice-header-bg: #F7FAFF;
+        --invoice-background: #FFFFFF;
+      }
+
+      .table-container {
+        margin-bottom: 10px;
+        border-radius: 9px;
+        overflow: hidden;
+        border: 1px solid #DCE6F4;
+        background: #FFFFFF;
+      }
+      .doc-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        background: #FFFFFF;
+        font-family: 'Be Vietnam Pro', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+      .doc-table th {
+        background: #F7FAFF;
+        color: #0B4FD4;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        height: 36px;
+        vertical-align: middle;
+        border-bottom: 1px solid #C9D9F2;
+        border-right: 1px solid #E2EAF5;
+        box-sizing: border-box;
+      }
+      .doc-table th:last-child {
+        border-right: none;
+      }
+      .doc-table th.col-stt { text-align: center; padding: 6px; }
+      .doc-table th.col-prod { text-align: left; padding: 6px 10px; }
+      .doc-table th.col-info { text-align: left; padding: 6px 12px; }
+      .doc-table th.col-price { text-align: center; padding: 6px 8px; }
+      .doc-table th.col-qty { text-align: center; padding: 6px 5px; }
+      .doc-table th.col-total { text-align: right; padding: 6px 16px 6px 8px; }
+
+      .doc-table td {
+        padding-top: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #E0E8F3;
+        border-right: 1px solid #E2EAF5;
+        vertical-align: middle;
+        background: #FFFFFF;
+        color: #07152F;
+        box-sizing: border-box;
+      }
+      .doc-table tr:last-child td {
+        border-bottom: none;
+      }
+      .doc-table td:last-child {
+        border-right: none;
+      }
+      .doc-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        height: 60px;
+      }
+
+      .td-stt {
+        text-align: center;
+        padding: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #07152F;
+      }
+      .td-prod {
+        padding: 6px 10px;
+      }
+      .td-info {
+        padding: 6px 12px;
+        font-size: 10.5px;
+        line-height: 15px;
+        color: #1E293B;
+      }
+      .td-price {
+        text-align: center;
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #07152F;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .td-qty {
+        text-align: center;
+        padding: 6px 5px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #07152F;
+      }
+      .td-total {
+        text-align: right;
+        padding: 6px 16px 6px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #0B4FD4;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .prod-cell {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .prod-img {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        border-radius: 3px;
+        background: transparent;
+        flex-shrink: 0;
+      }
+      .prod-img-placeholder {
+        width: 48px;
+        height: 48px;
+        border-radius: 3px;
+        background: #F1F5F9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #94A3B8;
+        flex-shrink: 0;
+      }
+      .prod-name {
+        font-family: 'Be Vietnam Pro', Arial, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.25;
+        color: #07152F;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .prod-code {
+        font-family: 'Be Vietnam Pro', Arial, sans-serif;
+        font-size: 9.5px;
+        font-weight: 600;
+        line-height: 1.2;
+        color: #0B4FD4;
+        margin-top: 2px;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
+      }
+      .info-line {
+        font-size: 10.5px;
+        line-height: 15px;
+        color: #1E293B;
+      }
+      .info-line span {
+        font-weight: 400;
+        color: #1E293B;
+      }
+
+      /* ===== PAYMENT & SUMMARY AREA ===== */
+      .bottom-grid {
+        display: flex;
+        gap: 11px;
+        align-items: stretch;
+        margin-top: 10px;
+        margin-bottom: 8px;
+      }
+      .vietqr-box {
+        width: 44%;
+        background: #F8FAFD;
+        border: 1px solid #D9E4F2;
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 10px;
+        box-sizing: border-box;
+      }
+      .qr-title {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #0755D9;
+        text-transform: uppercase;
+        letter-spacing: 0.2px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .qr-title-icon {
+        width: 15px;
+        height: 15px;
+        color: #0755D9;
+        flex-shrink: 0;
+      }
+      .qr-wrap {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .qr-img-box {
+        background: #FFFFFF;
+        border: 1px solid #E1E7EF;
+        border-radius: 8px;
+        padding: 4px;
+        flex-shrink: 0;
+        display: inline-block;
+      }
+      .qr-img {
+        width: 120px;
+        height: 120px;
+        aspect-ratio: 1/1;
+        object-fit: contain;
+        display: block;
+      }
+      .qr-info {
+        font-size: 9.5px;
+        color: #101828;
+        line-height: 1.45;
+        flex: 1;
+      }
+      .qr-info-label {
+        font-weight: 600;
+        color: #475467;
+      }
+      .qr-info-val {
+        font-weight: 600;
+        color: #101828;
+      }
+      .qr-acc-no {
+        font-weight: 700;
+        color: #0755D9;
+      }
+      .qr-divider {
+        border-top: 1px dashed #AFC6E9;
+        margin: 6px 0;
+      }
+      .qr-memo {
+        font-size: 8.5px;
+        line-height: 1.35;
+        color: #101828;
+      }
+
+      .right-col {
+        width: 56%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .summary-box {
+        width: 56%;
+        background: #F8FAFD;
+        border: 1px solid #D9E4F2;
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+      }
+      .sum-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 9.5px;
+        color: #475467;
+        margin-bottom: 3px;
+      }
+      .sum-row:last-child {
+        margin-bottom: 0;
+      }
+      .sum-label {
+        font-size: 9.5px;
+        font-weight: 500;
+        color: #475467;
+      }
+      .sum-val {
+        font-size: 10px;
+        font-weight: 600;
+        color: #101828;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .sum-divider {
+        border-top: 1px dashed #AFC6E9;
+        margin: 7px 0;
+      }
+      .sum-row.grand {
+        margin-top: 2px;
+        align-items: baseline;
+      }
+      .grand-label {
+        font-size: 13.5px;
+        font-weight: 800;
+        color: #07152F;
+      }
+      .grand-val {
+        font-family: 'Manrope', 'Be Vietnam Pro', sans-serif;
+        font-size: 21px;
+        font-weight: 800;
+        color: #0755D9;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .words-text {
+        font-size: 8px;
+        font-style: italic;
+        color: #667085;
+        text-align: right;
+        margin-top: 2px;
+        margin-bottom: 2px;
+      }
+      .paid-row {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #16A34A;
+      }
+      .paid-val {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #16A34A;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .debt-row {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #FF6500;
+      }
+      .debt-val {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #FF6500;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      /* ===== NOTES CARD (sits under summary-box, inside right-col) ===== */
+      .notes-card {
+        width: 100%;
+        background: #FAFCFF;
+        border: 1px solid #DCE6F3;
+        border-radius: 8px;
+        padding: 3mm 4mm;
+      }
+      .notes-title {
+        font-size: 9px;
+        font-weight: 700;
+        color: #0F172A;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .notes-list {
+        list-style: none;
+        font-size: 8.5px;
+        color: #475569;
+        line-height: 1.45;
+      }
+
+      /* ===== POLICY STRIP (1:1 MATCH WITH REFERENCE IMAGE) ===== */
+      .policy-strip {
+        display: flex;
+        background: #FAFCFF;
+        border: 1px solid #DCE6F3;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-top: 10px;
+        margin-bottom: 0;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .policy-item {
+        flex: 1;
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+        border-right: 1px solid #E2E8F0;
+        padding-right: 12px;
+        margin-right: 12px;
+        box-sizing: border-box;
+      }
+      .policy-item:last-child {
+        border-right: none;
+        padding-right: 0;
+        margin-right: 0;
+      }
+      .policy-icon {
+        width: 28px;
+        height: 28px;
+        color: #0755D9;
+        flex-shrink: 0;
+      }
+      .policy-text-wrap {
+        display: flex;
+        flex-direction: column;
+      }
+      .policy-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #0755D9;
+        line-height: 1.2;
+        margin-bottom: 2px;
+      }
+      .policy-desc {
+        font-size: 8.5px;
+        color: #344054;
+        line-height: 1.35;
+        white-space: pre-line;
+      }
+
+      /* ===== FOOTER (3 REFINED REGIONS: 22% / 48% / 30%) ===== */
+      .doc-footer {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: auto;
+        padding-top: 14px;
+        box-sizing: border-box;
+      }
+      .thanks-col {
+        width: 22%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        text-align: left;
+        box-sizing: border-box;
+      }
+      .thanks-asset {
+        height: 60px;
+        max-width: 170px;
+        object-fit: contain;
+        margin-bottom: 5px;
+        display: block;
+      }
+      .thanks-font {
+        font-family: 'Brush Script MT', 'Segoe Script', cursive;
+        font-size: 46px;
+        color: #0755D9;
+        line-height: 1;
+        margin-bottom: 5px;
+      }
+      .thanks-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #07152F;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 2px;
+      }
+      .thanks-sub {
+        font-size: 8.5px;
+        color: #667085;
+      }
+
+      .store-col {
+        width: 48%;
+        font-size: 11.5px;
+        color: #344054;
+        line-height: 1.5;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        box-sizing: border-box;
+      }
+      .store-col-name {
+        font-size: 14.5px;
+        font-weight: 800;
+        color: #0755D9;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+      .store-detail-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 3px;
+        font-size: 11.5px;
+        color: #101828;
+      }
+      .store-icon-inline {
+        width: 14px;
+        height: 14px;
+        color: #0755D9;
+        flex-shrink: 0;
+      }
+
+      .confirm-col {
+        width: 30%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        box-sizing: border-box;
+      }
+      .confirm-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #07152F;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 1px;
+      }
+      .confirm-store {
+        font-size: 9px;
+        color: #667085;
+        margin-bottom: 4px;
+      }
+      .sign-stamp-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+        position: relative;
+      }
+      .signature-img {
+        width: 105px;
+        max-height: 55px;
+        object-fit: contain;
+      }
+      .stamp-img {
+        width: 85px;
+        height: 85px;
+        object-fit: contain;
+        margin-left: -12px;
+      }
+    `;
+    }
+    /**
+     * Helper to build dynamic Policy Strip (4 equal columns from Settings)
+     */
+    renderPolicyStrip(settings) {
+        const defaultBenefits = [
+            { id: 'b1', enabled: true, title: 'Sản phẩm chính hãng', description: '100% chính hãng,\nđầy đủ hóa đơn VAT.', sortOrder: 1 },
+            { id: 'b2', enabled: true, title: 'Đổi trả linh hoạt', description: 'Hỗ trợ đổi trả trong\n7 ngày nếu có lỗi.', sortOrder: 2 },
+            { id: 'b3', enabled: true, title: 'Bảo hành uy tín', description: 'Bảo hành theo hãng,\nhỗ trợ tận tâm.', sortOrder: 3 },
+            { id: 'b4', enabled: true, title: 'Hỗ trợ nhanh chóng', description: 'Tư vấn 24/7,\ngiải đáp tận tình.', sortOrder: 4 },
+        ];
+        const benefitsSource = (settings.benefits && settings.benefits.length > 0)
+            ? settings.benefits
+            : defaultBenefits;
+        const activeBenefits = benefitsSource
+            .filter((b) => b.enabled !== false)
+            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        if (activeBenefits.length === 0)
+            return '';
+        const iconMap = {
+            b1: `<svg class="policy-icon" viewBox="0 0 24 24" fill="none" stroke="#0755D9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>`,
+            b2: `<svg class="policy-icon" viewBox="0 0 24 24" fill="none" stroke="#0755D9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
+            b3: `<svg class="policy-icon" viewBox="0 0 24 24" fill="none" stroke="#0755D9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"></rect><path d="M16 8h4l3 5v3h-7V8z"></path><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`,
+            b4: `<svg class="policy-icon" viewBox="0 0 24 24" fill="none" stroke="#0755D9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path></svg>`,
+        };
+        const fallbackIcons = [iconMap.b1, iconMap.b2, iconMap.b3, iconMap.b4];
+        const itemsHtml = activeBenefits.map((item, idx) => {
+            const iconSvg = iconMap[item.id] || fallbackIcons[idx % fallbackIcons.length];
+            const isLast = idx === activeBenefits.length - 1;
+            return `
+        <div class="policy-item" style="${isLast ? 'border-right: none; padding-right: 0; margin-right: 0;' : ''}">
+          ${iconSvg}
+          <div class="policy-text-wrap">
+            <div class="policy-title">${item.title}</div>
+            <div class="policy-desc">${item.description}</div>
+          </div>
+        </div>`;
+        }).join('');
+        return `<div class="policy-strip">${itemsHtml}</div>`;
+    }
+    /**
+     * Helper to build shared Header HTML (60% / 40%)
+     */
+    renderSharedHeader(docTitle, docCode, settings, metaItems) {
+        const metaHtml = metaItems
+            .map((m) => `<div class="banner-meta-item">${m.iconSvg} ${m.label}: ${m.value}</div>`)
+            .join('');
+        return `
+      <div class="doc-header">
+        <div class="brand-block">
+          <div class="brand-top">
+            ${settings.logoUrl
+            ? `<img src="${settings.logoUrl}" alt="${settings.storeName}" class="brand-logo" />`
+            : ''}
+            <div class="brand-text">
+              <div class="brand-title">${settings.storeName || 'NP COMPUTER'}</div>
+              <div class="brand-tagline">${settings.tagline || 'LINH KIỆN • PC GAMING • WORKSTATION'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="banner-box">
+          <div class="banner-title">${docTitle}</div>
+          <div class="code-pill">${docCode}</div>
+          <div class="banner-meta">
+            ${metaHtml}
+          </div>
+        </div>
+      </div>`;
+    }
+    /**
+     * Helper to build shared Footer HTML (3 Regions: 22% / 48% / 30%)
+     */
+    renderSharedFooter(confirmationTitle, settings) {
+        return `
+      <div class="doc-footer">
+        <!-- 1. CẢM ƠN (22%) -->
+        <div class="thanks-col">
+          ${settings.thankYouAssetUrl
+            ? `<img src="${settings.thankYouAssetUrl}" alt="Thank you" class="thanks-asset" />`
+            : `<div class="thanks-font">Thank you!</div>`}
+          <div class="thanks-title">CẢM ƠN QUÝ KHÁCH</div>
+          <div class="thanks-sub">Rất hân hạnh được phục vụ!</div>
+        </div>
+
+        <!-- 2. THÔNG TIN CỬA HÀNG (48%) -->
+        <div class="store-col">
+          <div class="store-col-name">${settings.storeName || 'NP COMPUTER'}</div>
+          <div class="store-detail-item"><svg class="store-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${settings.address || '130'}</div>
+          <div class="store-detail-item"><svg class="store-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>${settings.hotline || '0123.456.789'}</div>
+          <div class="store-detail-item"><svg class="store-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"></path></svg>${settings.website || 'ngocphieupc.shop'}</div>
+          <div class="store-detail-item"><svg class="store-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>${settings.facebook || 'facebook.com/ngoc.phieu.982562'}</div>
+        </div>
+
+        <!-- 3. XÁC NHẬN (30%) -->
+        <div class="confirm-col">
+          <div class="confirm-title">${confirmationTitle}</div>
+          <div class="confirm-store">${settings.storeName || 'NP Computer'}</div>
+          <div class="sign-stamp-wrap">
+            ${settings.signatureUrl ? `<img src="${settings.signatureUrl}" alt="Signature" class="signature-img" />` : ''}
+            ${settings.stampUrl ? `<img src="${settings.stampUrl}" alt="Stamp" class="stamp-img" />` : ''}
+          </div>
+        </div>
+      </div>`;
+    }
+    /**
+     * BUILD BÁO GIÁ HTML
+     */
     buildHtml(quote, settings) {
-        const payment = this.generateVietQR(quote, settings);
-        // Calculate sum of discounts
+        const payment = this.generateQuoteVietQR(quote, settings);
+        const amountInWords = (0, numberToWords_1.numberToWordsVietnamese)(quote.grandTotal);
+        // Sum discounts
         const itemsDiscountTotal = quote.items.reduce((sum, item) => {
             const itemDisc = item.discountType === 'percent'
                 ? (item.unitPrice * item.quantity * item.discount) / 100
@@ -180,623 +1101,208 @@ class PdfService {
             const itemDiscountValue = item.discountType === 'percent'
                 ? (item.unitPrice * item.quantity * item.discount) / 100
                 : item.discount;
-            const conditionBadge = (quote.showConditionInPdf && item.productSnapshot.condition)
-                ? `<span class="badge badge-gray">${item.productSnapshot.condition}</span>`
-                : '';
-            const warrantyBadge = item.warranty
-                ? `<span class="badge badge-brand">BH ${item.warranty}</span>`
-                : '';
+            const brandName = typeof item.productSnapshot?.brand === 'object'
+                ? item.productSnapshot?.brand?.name
+                : item.productSnapshot?.brand || item?.brand || '';
+            const serialText = item.serialNumber || item.serial || '';
             return `
-        <div class="product-item-card">
-          <div class="item-index">${index + 1}</div>
-
-          <div class="product-image-box">
-            ${item.productSnapshot.imageUrl
-                ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" />`
-                : `<div class="image-placeholder">
-                  <svg viewBox="0 0 40 40" fill="none">
-                    <rect x="12" y="12" width="16" height="16" rx="2" stroke="#94a3b8" stroke-width="1.5"/>
-                    <path d="M16 8V12M24 8V12M16 28V32M24 28V32M8 16H12M8 24H12M28 16H32M28 24H32" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                </div>`}
-          </div>
-
-          <div class="product-details">
-            <div class="product-title-row">
-              <h3 class="product-name">${item.productSnapshot.name}</h3>
-              <div class="product-badges">
-                ${conditionBadge}
-                ${warrantyBadge}
+        <tr>
+          <td class="td-stt">${index + 1}</td>
+          <td class="td-prod">
+            <div class="prod-cell">
+              ${item.productSnapshot.imageUrl
+                ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" class="prod-img" />`
+                : `<div class="prod-img-placeholder">NP</div>`}
+              <div>
+                <div class="prod-name">${item.productSnapshot.name}</div>
+                <div class="prod-code">Mã: ${item.productSnapshot.productCode}</div>
               </div>
             </div>
-            <p class="product-meta"><span class="product-code">Mã: ${item.productSnapshot.productCode}</span>${specsText ? ` • ${specsText}` : ''}</p>
-          </div>
-
-          <div class="product-pricing">
-            <p class="unit-qty">${this.formatCurrency(item.unitPrice)} × ${item.quantity}</p>
-            ${itemDiscountValue > 0
-                ? `<p class="discount-tag">Giảm: -${item.discountType === 'percent' ? item.discount + '%' : this.formatCurrency(itemDiscountValue)}</p>`
-                : ''}
-            <p class="total-price">${this.formatCurrency(item.total)}</p>
-          </div>
-        </div>`;
+          </td>
+          <td class="td-info">
+            <div class="info-line">
+              ${brandName ? `<div>Hãng: <span style="font-weight: 600; color: #0755D9;">${brandName}</span></div>` : ''}
+              ${item.warranty ? `<div>Bảo hành: <span>${item.warranty}</span></div>` : ''}
+              ${serialText ? `<div>Serial: <span>${serialText}</span></div>` : ''}
+              ${specsText ? `<div style="color: #64748b; font-size: 8.5px; margin-top: 1px;">${specsText}</div>` : ''}
+            </div>
+          </td>
+          <td class="td-price">${this.formatCurrency(item.unitPrice)}</td>
+          <td class="td-qty">${item.quantity}</td>
+          <td class="td-total">
+            ${this.formatCurrency(item.total)}
+            ${itemDiscountValue > 0 ? `<div style="font-size: 9px; color: #DC2626;">Giảm -${this.formatCurrency(itemDiscountValue)}</div>` : ''}
+          </td>
+        </tr>`;
         })
             .join('');
+        const validUntilDate = quote.validUntil
+            ? quote.validUntil
+            : new Date(new Date(quote.createdDate).getTime() + 7 * 86400000);
+        const contactPersonName = quote.contactPerson || quote.customer?.contactPerson || quote.customer?.name;
+        const headerHtml = this.renderSharedHeader('BÁO GIÁ', quote.quoteCode, settings, [
+            {
+                iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+                label: 'Ngày báo giá',
+                value: this.formatDate(quote.createdDate),
+            },
+            {
+                iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+                label: 'Hiệu lực đến',
+                value: this.formatDate(validUntilDate),
+            },
+        ]);
+        const footerHtml = this.renderSharedFooter('XÁC NHẬN BÁO GIÁ', settings);
         return `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Báo giá ${quote.quoteCode} - NP Computer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      font-size: 11px;
-      line-height: 1.4;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    .page {
-      width: 210mm;
-      min-height: 297mm;
-      padding: 20px 28px 24px;
-      position: relative;
-      background: #ffffff;
-      display: block;
-    }
-
-    /* ===== COMPACT HEADER (70px) ===== */
-    .header {
-      height: 70px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #0f172a;
-      margin-bottom: 10px;
-    }
-
-    .brand-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-logo {
-      height: 42px;
-      max-width: 110px;
-      object-fit: contain;
-    }
-
-    .brand-title {
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      color: #0f172a;
-      line-height: 1;
-    }
-
-    .brand-subtitle {
-      font-size: 8.5px;
-      font-weight: 700;
-      color: #2563eb;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      margin-top: 3px;
-    }
-
-    .header-right {
-      text-align: right;
-    }
-
-    .quote-code-badge {
-      display: inline-block;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      padding: 6px 14px;
-      border-radius: 8px;
-    }
-
-    .quote-code-title {
-      font-size: 8.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #64748b;
-    }
-
-    .quote-code-val {
-      font-size: 13px;
-      font-weight: 800;
-      color: #0f172a;
-      margin-top: 1px;
-    }
-
-    .quote-date-val {
-      font-size: 9.5px;
-      color: #64748b;
-    }
-
-    /* COMPACT CONTACT BAR */
-    .contact-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px 18px;
-      font-size: 9px;
-      color: #475569;
-      margin-bottom: 10px;
-    }
-    .contact-bar b { color: #0f172a; font-weight: 600; }
-
-    /* ===== CUSTOMER CARD (COMPACT STRIP) ===== */
-    .customer-strip {
-      background: #f8fafc;
-      border-radius: 8px;
-      padding: 8px 14px;
-      margin-bottom: 12px;
-    }
-
-    .customer-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 4px 24px;
-    }
-
-    .info-row {
-      display: flex;
-      font-size: 10.5px;
-    }
-
-    .info-label {
-      color: #64748b;
-      width: 90px;
-      flex-shrink: 0;
-      font-weight: 500;
-    }
-
-    .info-val {
-      color: #0f172a;
-      font-weight: 600;
-    }
-
-    /* ===== COMMERCIAL PRODUCTS LIST (COMPACT DENSITY) ===== */
-    .products-container {
-      margin-bottom: 12px;
-    }
-
-    /* Height max 72px, padding 8px vertical / 12px horizontal */
-    .product-item-card {
-      height: 66px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      background: #ffffff;
-      border-radius: 8px;
-      border: 1px solid #f1f5f9;
-      margin-bottom: 6px;
-    }
-
-    .item-index {
-      font-size: 9.5px;
-      font-weight: 700;
-      color: #94a3b8;
-      width: 14px;
-      flex-shrink: 0;
-      text-align: center;
-    }
-
-    /* Image size 50x50 */
-    .product-image-box {
-      width: 50px;
-      height: 50px;
-      flex-shrink: 0;
-      border-radius: 6px;
-      overflow: hidden;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-    }
-
-    .product-image-box img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .image-placeholder {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .product-details {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .product-title-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .product-name {
-      font-size: 13.5px;
-      font-weight: 700;
-      color: #0f172a;
-      letter-spacing: -0.2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 380px;
-    }
-
-    .product-badges {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
-
-    /* Badge height 18px, font 10px */
-    .badge {
-      height: 18px;
-      line-height: 16px;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 0 6px;
-      border-radius: 4px;
-      white-space: nowrap;
-    }
-
-    .badge-gray {
-      background: #f1f5f9;
-      color: #475569;
-    }
-
-    .badge-brand {
-      background: #eff6ff;
-      color: #2563eb;
-      border: 1px solid #bfdbfe;
-    }
-
-    .product-meta {
-      font-size: 10.5px;
-      color: #64748b;
-      margin-top: 3px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .product-code {
-      font-weight: 600;
-      color: #2563eb;
-    }
-
-    .product-pricing {
-      width: 130px;
-      flex-shrink: 0;
-      text-align: right;
-    }
-
-    .unit-qty {
-      font-size: 10.5px;
-      color: #64748b;
-    }
-
-    .discount-tag {
-      font-size: 9.5px;
-      color: #2563eb;
-      font-weight: 600;
-    }
-
-    .total-price {
-      font-size: 14.5px;
-      font-weight: 800;
-      color: #0f172a;
-      margin-top: 1px;
-    }
-
-    /* ===== SUMMARY GRID (GRAND TOTAL + VIETQR) ===== */
-    .summary-grid {
-      display: flex;
-      gap: 16px;
-      align-items: stretch;
-      margin-bottom: 12px;
-    }
-
-    .card-box {
-      background: #f8fafc;
-      border-radius: 12px;
-      padding: 16px 20px;
-    }
-
-    /* VIETQR CARD */
-    .vietqr-card {
-      flex: 1.25;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .vietqr-image-box {
-      width: 140px;
-      height: 140px;
-      flex-shrink: 0;
-      background: #ffffff;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid #cbd5e1;
-      padding: 6px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-    }
-
-    .vietqr-image-box img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .vietqr-info {
-      flex: 1;
-      min-width: 0;
-      font-size: 10.5px;
-      color: #475569;
-      line-height: 1.6;
-    }
-
-    .vietqr-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #0f172a;
-      margin-bottom: 4px;
-    }
-
-    .vietqr-memo {
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px dashed #cbd5e1;
-      font-size: 10px;
-      word-break: break-word;
-    }
-
-    .vietqr-memo b { color: #0f172a; font-weight: 700; }
-
-    /* GRAND TOTAL CARD (PERFECTLY BALANCED) */
-    .grand-total-card {
-      flex: 1;
-      border-top: 3px solid #2563eb;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 16px 20px;
-    }
-
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #64748b;
-      margin-bottom: 6px;
-    }
-
-    .summary-row.discount { color: #2563eb; font-weight: 600; }
-    .summary-row .val { color: #0f172a; font-weight: 600; }
-
-    .grand-total-box {
-      border-top: 1px solid #e2e8f0;
-      padding-top: 10px;
-      margin-top: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .grand-total-label {
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #0f172a;
-    }
-
-    .grand-total-amount {
-      font-size: 21px;
-      font-weight: 800;
-      color: #2563eb;
-      letter-spacing: -0.4px;
-      line-height: 1;
-    }
-
-    /* ===== TERMS (FONT 10PX) ===== */
-    .terms-card {
-      margin-bottom: 10px;
-    }
-
-    .terms-list {
-      list-style: none;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3px 16px;
-    }
-
-    .terms-list li {
-      font-size: 10px;
-      color: #475569;
-      line-height: 1.4;
-    }
-
-    /* ===== FOOTER (30PX) ===== */
-    .footer {
-      height: 30px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 9.5px;
-      color: #64748b;
-    }
-
-    .footer-left { font-weight: 500; color: #475569; }
-    .footer-right { font-weight: 500; }
-  </style>
+  <title>BÁO GIÁ - ${quote.quoteCode}</title>
+  <style>${this.getCommonCss()}</style>
 </head>
 <body>
-  <div class="page">
+  <div class="page-container">
+    <div>
+      <!-- SHARED HEADER -->
+      ${headerHtml}
 
-    <!-- HEADER (70px) -->
-    <div class="header">
-      <div class="brand-left">
-        ${settings.logoUrl ? `<img src="${settings.logoUrl}" alt="Logo" class="brand-logo" />` : ''}
-        <div>
-          <h1 class="brand-title">${settings.storeName || 'NP COMPUTER'}</h1>
-          <p class="brand-subtitle">LINH KIỆN • PC GAMING • WORKSTATION</p>
+      <!-- CUSTOMER CARD -->
+      <div class="customer-card">
+        <div class="customer-grid">
+          <div class="customer-col-1">
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Khách hàng:</span><span class="info-val">${quote.customer.name}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg><span class="info-label">Điện thoại:</span><span class="info-val">${quote.customer.phone || '---'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg><span class="info-label">Email:</span><span class="info-val">${quote.customer.email || '---'}</span></div>
+          </div>
+          <div class="customer-col-2">
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg><span class="info-label">Địa chỉ:</span><span class="info-val">${quote.customer.address || '---'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Người lập:</span><span class="info-val">${quote.createdByName || quote.createdBy || 'Admin'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg><span class="info-label">Ghi chú:</span><span class="info-val">${quote.notes || '---'}</span></div>
+          </div>
+          <div class="customer-col-status">
+            <div style="font-size: 8px; font-weight: 600; color: #667085; text-transform: uppercase; letter-spacing: 0.3px;">TRẠNG THÁI</div>
+            <div style="font-size: 12px; font-weight: 700; color: ${quote.status === types_1.QuoteStatus.CANCELLED || quote.status === 'Đã hủy' ? '#DC2626' : quote.status === types_1.QuoteStatus.DRAFT || quote.status === 'Nháp' ? '#667085' : '#0755D9'}; margin-top: 4px;">
+              ${(quote.status || types_1.QuoteStatus.CONFIRMED).toUpperCase()}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="header-right">
-        <div class="quote-code-badge">
-          <div class="quote-code-title">Báo giá: <span style="color:#0f172a">${quote.quoteCode}</span></div>
-          <div class="quote-date-val">Ngày lập: ${this.formatDate(quote.createdDate)}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- COMPACT CONTACT BAR -->
-    <div class="contact-bar">
-      ${settings.website ? `<span><b>Website:</b> ${settings.website}</span>` : ''}
-      ${settings.hotline ? `<span><b>Hotline:</b> ${settings.hotline}</span>` : ''}
-      ${settings.email ? `<span><b>Email:</b> ${settings.email}</span>` : ''}
-      ${settings.facebook ? `<span><b>FB:</b> ${settings.facebook}</span>` : ''}
-      ${settings.address ? `<span><b>Địa chỉ:</b> ${settings.address}</span>` : ''}
-    </div>
-
-    <!-- CUSTOMER STRIP -->
-    <div class="customer-strip">
-      <div class="customer-grid">
-        <div>
-          <div class="info-row"><span class="info-label">Khách hàng:</span><span class="info-val">${quote.customer.name}</span></div>
-          ${quote.customer.phone ? `<div class="info-row" style="margin-top:2px;"><span class="info-label">Điện thoại:</span><span class="info-val">${quote.customer.phone}</span></div>` : ''}
-        </div>
-        <div>
-          ${quote.customer.address ? `<div class="info-row"><span class="info-label">Địa chỉ:</span><span class="info-val">${quote.customer.address}</span></div>` : ''}
-          <div class="info-row" style="margin-top:2px;"><span class="info-label">Người lập BG:</span><span class="info-val">${quote.createdBy || 'NP Computer'}</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- COMMERCIAL PRODUCTS CONTAINER (COMPACT HIGH DENSITY) -->
-    <div class="products-container">
-      ${itemsHtml}
-    </div>
-
-    <!-- SUMMARY & VIETQR GRID (MAX 18% HEIGHT) -->
-    <div class="summary-grid">
-      <!-- VIETQR CARD -->
-      <div class="card-box vietqr-card">
-        ${payment.qrUrl ? `<div class="vietqr-image-box"><img src="${payment.qrUrl}" alt="VietQR" /></div>` : ''}
-        <div class="vietqr-info">
-          <div class="vietqr-title">Thanh toán nhanh (VietQR)</div>
-          <div><b>Ngân hàng:</b> ${payment.bankName}</div>
-          <div><b>Chủ TK:</b> ${payment.accountName || 'NP COMPUTER'}</div>
-          <div><b>STK:</b> ${payment.accountNo}</div>
-          ${payment.transferMemo ? `<div class="vietqr-memo"><b>Nội dung CK:</b> ${payment.transferMemo}</div>` : ''}
-        </div>
+      <!-- PRODUCT TABLE -->
+      <div class="table-container">
+        <table class="doc-table">
+          <colgroup>
+            <col style="width: 5%;" />
+            <col style="width: 30%;" />
+            <col style="width: 25%;" />
+            <col style="width: 13%;" />
+            <col style="width: 7%;" />
+            <col style="width: 20%;" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="col-stt">STT</th>
+              <th class="col-prod">SẢN PHẨM</th>
+              <th class="col-info">THÔNG TIN</th>
+              <th class="col-price">ĐƠN GIÁ</th>
+              <th class="col-qty">SL</th>
+              <th class="col-total">THÀNH TIỀN</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
       </div>
 
-      <!-- GRAND TOTAL CARD -->
-      <div class="card-box grand-total-card">
-        <div>
-          <div class="summary-row"><span>Tạm tính:</span><span class="val">${this.formatCurrency(quote.subtotal)}</span></div>
-          ${combinedDiscountTotal > 0
-            ? `<div class="summary-row discount"><span>Chiết khấu:</span><span class="val">-${this.formatCurrency(combinedDiscountTotal)}</span></div>`
-            : ''}
-          ${quote.shippingFee > 0
-            ? `<div class="summary-row"><span>Vận chuyển:</span><span class="val">${this.formatCurrency(quote.shippingFee)}</span></div>`
-            : ''}
-          ${quote.vatEnabled
-            ? `<div class="summary-row"><span>VAT (${quote.vatPercent}%):</span><span class="val">${this.formatCurrency(quote.vatAmount)}</span></div>`
-            : ''}
+      <div style="flex: 1 0 0; min-height: 14px;"></div>
+
+      <!-- SUMMARY & VIETQR -->
+      <div class="bottom-grid">
+        <div class="vietqr-box">
+          <div class="qr-title">
+            <svg class="qr-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            THANH TOÁN NHANH (VIETQR)
+          </div>
+          <div class="qr-wrap">
+            ${payment.qrUrl ? `<div class="qr-img-box"><img src="${payment.qrUrl}" alt="VietQR" class="qr-img" /></div>` : ''}
+            <div class="qr-info">
+              <div><span class="qr-info-label">Ngân hàng:</span> <span class="qr-info-val">${payment.bankName}</span></div>
+              <div><span class="qr-info-label">Chủ TK:</span> <span class="qr-info-val">${payment.accountName}</span></div>
+              <div><span class="qr-info-label">Số TK:</span> <span class="qr-acc-no">${payment.accountNo}</span></div>
+              <div class="qr-divider"></div>
+              <div class="qr-memo">
+                <span class="qr-info-label">Nội dung CK:</span><br/>
+                <span style="font-weight: 600; color: #101828;">${payment.transferMemo}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="grand-total-box">
-          <span class="grand-total-label">TỔNG THANH TOÁN:</span>
-          <span class="grand-total-amount">${this.formatCurrency(quote.grandTotal)}</span>
+        <div class="right-col">
+          <div class="summary-box" style="width: 100%;">
+            <div>
+              <div class="sum-row"><span class="sum-label">Tạm tính</span><span class="sum-val">${this.formatCurrency(quote.subtotal)}</span></div>
+              <div class="sum-row">
+                <span class="sum-label" style="color: ${combinedDiscountTotal > 0 ? '#DC2626' : '#475467'};">Giảm giá</span>
+                <span class="sum-val" style="color: ${combinedDiscountTotal > 0 ? '#DC2626' : '#475467'};">${combinedDiscountTotal > 0 ? '-' + this.formatCurrency(combinedDiscountTotal) : '0 đ'}</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="sum-divider"></div>
+              <div class="sum-row grand">
+                <span class="grand-label">TỔNG GIÁ TRỊ</span>
+                <span class="grand-val">${this.formatCurrency(quote.grandTotal)}</span>
+              </div>
+              <div class="words-text">(Bằng chữ: ${amountInWords})</div>
+            </div>
+          </div>
+
+          <!-- NOTES CARD -->
+          <div class="notes-card">
+            <div class="notes-title">GHI CHÚ</div>
+            <ul class="notes-list">
+              <li>• Báo giá trên chưa bao gồm phí vận chuyển và lắp đặt.</li>
+              <li>• Thời gian giao hàng dự kiến: 1 - 2 ngày kể từ khi xác nhận.</li>
+              <li>• Bảo hành theo chính sách của hãng.</li>
+              <li>• Báo giá có hiệu lực đến hết ngày ${this.formatDate(validUntilDate)}.</li>
+            </ul>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- TERMS (FONT 10PX) -->
-    <div class="terms-card">
-      <ul class="terms-list">
-        <li>✓ Giá có hiệu lực trong 07 ngày kể từ ngày lập báo giá.</li>
-        <li>✓ Bảo hành theo tem và serial number của cửa hàng.</li>
-        <li>✓ Không bảo hành do rơi vỡ, cháy nổ hoặc vào nước.</li>
-        <li>✓ Quý khách vui lòng kiểm tra sản phẩm trước khi thanh toán.</li>
-      </ul>
-    </div>
+      </div> <!-- END doc-body-wrap -->
 
-    <!-- FOOTER (30PX) -->
-    <div class="footer">
-      <div class="footer-left">Cảm ơn Quý khách đã lựa chọn NP Computer.</div>
-      <div class="footer-right">
-        ${settings.website || 'npcomputer.vn'}  •  ${settings.facebook || 'facebook.com'}  •  Hotline: ${settings.hotline || '0901.234.567'}
+      <div class="doc-footer-wrap">
+        <!-- POLICY STRIP -->
+        ${this.renderPolicyStrip(settings)}
+
+        <!-- SHARED FOOTER -->
+        ${footerHtml}
       </div>
     </div>
-
-  </div>
-</body>
+  </body>
 </html>`;
     }
-    generateInvoiceVietQR(invoice, settings) {
-        const customerName = invoice.customer?.name || '';
-        const phonePart = invoice.customer?.phone ? ` - ${invoice.customer.phone}` : '';
-        const invoiceCodePart = invoice.invoiceCode ? ` - ${invoice.invoiceCode}` : '';
-        const transferMemo = `${customerName}${phonePart}${invoiceCodePart}`;
-        const parsed = this.parseBankInfo(settings?.bankInfo || '');
-        if (!parsed) {
-            return {
-                qrUrl: settings?.qrPaymentUrl || '',
-                bankName: 'Ngân hàng',
-                accountNo: '',
-                accountName: '',
-                transferMemo,
-            };
-        }
-        const amount = invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.grandTotal;
-        return {
-            qrUrl: `https://img.vietqr.io/image/${parsed.bankSlug}-${parsed.accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferMemo)}&accountName=${encodeURIComponent(parsed.accountName)}`,
-            bankName: parsed.bankName,
-            accountNo: parsed.accountNo,
-            accountName: parsed.accountName,
-            transferMemo,
-        };
-    }
+    /**
+     * BUILD HÓA ĐƠN BÁN HÀNG HTML
+     */
     buildInvoiceHtml(invoice, settings) {
         const payment = this.generateInvoiceVietQR(invoice, settings);
-        // Calculate sum of discounts
+        const amountInWords = (0, numberToWords_1.numberToWordsVietnamese)(invoice.grandTotal);
+        // Sum discounts
         const itemsDiscountTotal = invoice.items.reduce((sum, item) => {
             const itemDisc = item.discountType === 'percent'
                 ? (item.unitPrice * item.quantity * item.discount) / 100
                 : (item.discount || 0);
             return sum + itemDisc;
         }, 0);
-        const quoteDiscountTotal = invoice.discountType === 'percent'
+        const invoiceDiscountTotal = invoice.discountType === 'percent'
             ? ((invoice.subtotal - itemsDiscountTotal) * invoice.discount) / 100
             : (invoice.discount || 0);
-        const combinedDiscountTotal = itemsDiscountTotal + quoteDiscountTotal;
+        const combinedDiscountTotal = itemsDiscountTotal + invoiceDiscountTotal;
+        const isPaidInFull = invoice.remainingAmount <= 0;
         const itemsHtml = invoice.items
             .sort((a, b) => a.order - b.order)
             .map((item, index) => {
@@ -804,272 +1310,200 @@ class PdfService {
             const itemDiscountValue = item.discountType === 'percent'
                 ? (item.unitPrice * item.quantity * item.discount) / 100
                 : item.discount;
-            const conditionBadge = (invoice.showConditionInPdf && item.productSnapshot.condition)
-                ? `<span class="badge badge-gray">${item.productSnapshot.condition}</span>`
-                : '';
-            const warrantyBadge = item.warranty
-                ? `<span class="badge badge-brand">BH ${item.warranty}</span>`
-                : '';
-            const serialBadge = item.serialNumber
-                ? `<span class="badge badge-gray" style="font-family: monospace;">S/N: ${item.serialNumber}</span>`
-                : '';
+            const serialsList = (item.selectedSerials && item.selectedSerials.length > 0)
+                ? item.selectedSerials.join(', ')
+                : item.serials && item.serials.length > 0
+                    ? item.serials.join(', ')
+                    : item.serialNumber || '';
+            const brandName = typeof item.productSnapshot?.brand === 'object'
+                ? item.productSnapshot?.brand?.name
+                : item.productSnapshot?.brand || item?.brand || '';
             return `
-        <div class="product-item-card">
-          <div class="item-index">${index + 1}</div>
-
-          <div class="product-image-box">
-            ${item.productSnapshot.imageUrl
-                ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" />`
-                : `<div class="image-placeholder">
-                  <svg viewBox="0 0 40 40" fill="none">
-                    <rect x="12" y="12" width="16" height="16" rx="2" stroke="#94a3b8" stroke-width="1.5"/>
-                    <path d="M16 8V12M24 8V12M16 28V32M24 28V32M8 16H12M8 24H12M28 16H32M28 24H32" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-               </div>`}
-          </div>
-
-          <div class="product-details">
-            <div class="product-header">
-              <span class="product-title">${item.productSnapshot.name}</span>
-              ${conditionBadge}
-              ${warrantyBadge}
-              ${serialBadge}
+        <tr>
+          <td class="td-stt">${index + 1}</td>
+          <td class="td-prod">
+            <div class="prod-cell">
+              ${item.productSnapshot.imageUrl
+                ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" class="prod-img" />`
+                : `<div class="prod-img-placeholder">NP</div>`}
+              <div>
+                <div class="prod-name">${item.productSnapshot.name}</div>
+                <div class="prod-code">Mã: ${item.productSnapshot.productCode}</div>
+              </div>
             </div>
-
-            ${specsText ? `<div class="product-specs">${specsText}</div>` : ''}
-
-            <div class="product-meta">
-              <span class="product-code font-mono">${item.productSnapshot.productCode}</span>
+          </td>
+          <td class="td-info">
+            <div class="info-line">
+              ${brandName ? `<div>Hãng: <span style="font-weight: 600; color: #0755D9;">${brandName}</span></div>` : ''}
+              ${item.warranty ? `<div>Bảo hành: <span>${item.warranty}</span></div>` : ''}
+              ${serialsList ? `<div>Serial: <span>${serialsList}</span></div>` : ''}
+              ${specsText ? `<div style="color: #64748b; font-size: 8.5px; margin-top: 1px;">${specsText}</div>` : ''}
             </div>
-          </div>
-
-          <div class="product-pricing">
-            <div class="price-row">
-              <span class="qty">${item.quantity} x</span>
-              <span class="unit-price">${this.formatCurrency(item.unitPrice)}</span>
-            </div>
-            ${itemDiscountValue > 0 ? `<div class="discount-tag">Giảm: -${this.formatCurrency(itemDiscountValue)}</div>` : ''}
-            <div class="item-total">${this.formatCurrency(item.total)}</div>
-          </div>
-        </div>
-      `;
+          </td>
+          <td class="td-price">${this.formatCurrency(item.unitPrice)}</td>
+          <td class="td-qty">${item.quantity}</td>
+          <td class="td-total">
+            ${this.formatCurrency(item.total)}
+            ${itemDiscountValue > 0 ? `<div style="font-size: 9px; color: #DC2626;">Giảm -${this.formatCurrency(itemDiscountValue)}</div>` : ''}
+          </td>
+        </tr>`;
         })
             .join('');
-        const paymentsHtml = invoice.payments && invoice.payments.length > 0
-            ? `<div style="margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <div style="font-size: 11px; font-weight: 700; color: #1e293b; margin-bottom: 8px; text-transform: uppercase;">Lịch sử thanh toán (${invoice.payments.length} đợt)</div>
-          ${invoice.payments.map((p, i) => `
-            <div style="display: flex; justify-content: space-between; font-size: 10px; padding: 3px 0; border-bottom: 1px dashed #e2e8f0;">
-              <div>
-                <strong>Lần ${i + 1} (${p.paymentMethod}):</strong> ${this.formatDate(p.paymentDate)} ${p.notes ? ` - <em>${p.notes}</em>` : ''}
-              </div>
-              <div style="font-weight: 700; color: #16a34a;">+${this.formatCurrency(p.amount)}</div>
-            </div>
-          `).join('')}
-         </div>`
-            : '';
-        const isPaidInFull = invoice.remainingAmount <= 0;
+        const metaItems = [
+            {
+                iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+                label: 'Ngày lập',
+                value: this.formatDate(invoice.createdDate),
+            },
+        ];
+        if (invoice.quoteCode) {
+            metaItems.push({
+                iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`,
+                label: 'Báo giá gốc',
+                value: invoice.quoteCode,
+            });
+        }
+        const headerHtml = this.renderSharedHeader('HÓA ĐƠN', invoice.invoiceCode, settings, metaItems);
+        const footerHtml = this.renderSharedFooter('XÁC NHẬN HÓA ĐƠN', settings);
         return `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
   <title>HÓA ĐƠN BÁN HÀNG - ${invoice.invoiceCode}</title>
-  <style>
-    @page { size: A4; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #0f172a; font-size: 11px; line-height: 1.4; -webkit-print-color-adjust: exact; }
-    .page-container { width: 210mm; min-height: 297mm; padding: 28px 32px; margin: 0 auto; display: flex; flex-direction: column; justify-content: space-between; }
-    .header-card { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    .store-identity { display: flex; align-items: center; gap: 14px; }
-    .store-logo { width: 44px; h-44px; object-fit: contain; border-radius: 8px; }
-    .logo-placeholder { width: 44px; height: 44px; background: #0f172a; border-radius: 8px; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; }
-    .store-name { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 2px; }
-    .store-sub { font-size: 10px; color: #64748b; font-weight: 500; }
-    .invoice-title-block { text-align: right; }
-    .invoice-badge-title { font-size: 20px; font-weight: 800; color: #2563eb; letter-spacing: 0.5px; }
-    .invoice-code-tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 700; color: #0f172a; background: #f1f5f9; padding: 3px 8px; border-radius: 4px; margin-top: 4px; display: inline-block; }
-    .customer-card { display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; }
-    .info-column { width: 48%; }
-    .info-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-    .info-row { font-size: 11px; color: #334155; margin-bottom: 3px; display: flex; }
-    .info-label { width: 85px; color: #64748b; font-weight: 500; flex-shrink: 0; }
-    .info-value { font-weight: 600; color: #0f172a; }
-    .product-list-container { margin-bottom: 20px; flex-grow: 1; }
-    .product-item-card { display: flex; align-items: center; padding: 8px 12px; margin-bottom: 6px; background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; }
-    .item-index { width: 22px; font-size: 10px; font-weight: 700; color: #94a3b8; font-family: monospace; }
-    .product-image-box { width: 50px; height: 50px; border-radius: 6px; overflow: hidden; background: #f8fafc; border: 1px solid #e2e8f0; margin-right: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-    .product-image-box img { width: 100%; height: 100%; object-fit: cover; }
-    .image-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; }
-    .product-details { flex: 1; min-width: 0; padding-right: 12px; }
-    .product-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 2px; }
-    .product-title { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.25; }
-    .badge { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
-    .badge-gray { color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; }
-    .badge-brand { color: #0d9488; background: #ccfbf1; border: 1px solid #99f6e4; }
-    .product-specs { font-size: 10px; color: #64748b; margin-top: 1px; }
-    .product-meta { font-size: 9px; color: #94a3b8; margin-top: 2px; }
-    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .product-pricing { text-align: right; width: 130px; flex-shrink: 0; }
-    .price-row { font-size: 10px; color: #64748b; }
-    .qty { font-weight: 700; color: #0f172a; }
-    .unit-price { font-weight: 600; }
-    .discount-tag { font-size: 9px; font-weight: 600; color: #ef4444; }
-    .item-total { font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 2px; }
-    .bottom-section { margin-top: auto; border-top: 1px solid #e2e8f0; padding-top: 16px; }
-    .financials-card { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 16px; }
-    .payment-qr-column { width: 340px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 12px; }
-    .qr-image { width: 85px; height: 85px; border-radius: 6px; object-fit: contain; background: #ffffff; border: 1px solid #cbd5e1; padding: 3px; flex-shrink: 0; }
-    .qr-text { font-size: 9px; color: #475569; }
-    .qr-bank-title { font-size: 10px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
-    .qr-acc-num { font-size: 11px; font-weight: 800; color: #2563eb; font-family: monospace; }
-    .totals-column { width: 280px; }
-    .totals-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: #475569; }
-    .totals-row.grand { border-top: 2px solid #0f172a; margin-top: 6px; padding-top: 8px; }
-    .grand-total-label { font-size: 11px; font-weight: 800; color: #0f172a; }
-    .grand-total-amount { font-size: 16px; font-weight: 800; color: #2563eb; }
-    .paid-row { color: #16a34a; font-weight: 700; }
-    .debt-row { color: #d97706; font-weight: 800; font-size: 12px; border-top: 1px solid #f1f5f9; padding-top: 4px; }
-    .terms-card { background: #f8fafc; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; border: 1px solid #f1f5f9; }
-    .terms-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 9px; color: #64748b; }
-    .footer { display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px; }
-  </style>
+  <style>${this.getCommonCss()}</style>
 </head>
 <body>
   <div class="page-container">
+    <div>
+      <!-- SHARED HEADER -->
+      ${headerHtml}
 
-    <!-- HEADER CARD -->
-    <div class="header-card">
-      <div class="store-identity">
-        ${settings.logoUrl
-            ? `<img src="${settings.logoUrl}" alt="${settings.storeName}" class="store-logo" />`
-            : `<div class="logo-placeholder">NP</div>`}
-        <div>
-          <div class="store-name">${settings.storeName || 'NP COMPUTER'}</div>
-          <div class="store-sub">${settings.address || 'Chuyên Linh Kiện & Máy Tính Cao Cấp'}</div>
-          <div class="store-sub">Hotline: ${settings.hotline || '0901.234.567'}</div>
+      <!-- CUSTOMER CARD WITH PAYMENT STATUS -->
+      <div class="customer-card">
+        <div class="customer-grid">
+          <div class="customer-col-1">
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Khách hàng:</span><span class="info-val">${invoice.customer.name}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg><span class="info-label">Điện thoại:</span><span class="info-val">${invoice.customer.phone || '---'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg><span class="info-label">Email:</span><span class="info-val">${invoice.customer.email || '---'}</span></div>
+          </div>
+          <div class="customer-col-2">
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg><span class="info-label">Địa chỉ:</span><span class="info-val">${invoice.customer.address || '---'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Người lập:</span><span class="info-val">${invoice.createdByName || invoice.createdBy || 'Admin'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg><span class="info-label">Ghi chú:</span><span class="info-val">${invoice.notes || '---'}</span></div>
+          </div>
+          <div class="customer-col-status">
+            <div style="font-size: 8px; font-weight: 600; color: #667085; text-transform: uppercase; letter-spacing: 0.3px;">TRẠNG THÁI</div>
+            <div style="font-size: 12px; font-weight: 700; color: ${isPaidInFull ? '#16A34A' : '#F97316'}; margin-top: 4px;">
+              ${isPaidInFull ? 'ĐÃ THANH TOÁN' : 'CÒN NỢ'}
+            </div>
+            ${!isPaidInFull ? `<div style="font-size: 12px; font-weight: 700; color: #F97316; margin-top: 3px; font-variant-numeric: tabular-nums;">${this.formatCurrency(invoice.remainingAmount)}</div>` : ''}
+          </div>
         </div>
       </div>
 
-      <div class="invoice-title-block">
-        <div class="invoice-badge-title">HÓA ĐƠN BÁN HÀNG</div>
-        <div class="invoice-code-tag">${invoice.invoiceCode}</div>
-        ${invoice.quoteCode ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">Báo giá gốc: <strong class="font-mono">${invoice.quoteCode}</strong></div>` : ''}
+      <!-- PRODUCT TABLE -->
+      <div class="table-container">
+        <table class="doc-table">
+          <colgroup>
+            <col style="width: 5%;" />
+            <col style="width: 30%;" />
+            <col style="width: 25%;" />
+            <col style="width: 13%;" />
+            <col style="width: 7%;" />
+            <col style="width: 20%;" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="col-stt">STT</th>
+              <th class="col-prod">SẢN PHẨM</th>
+              <th class="col-info">THÔNG TIN</th>
+              <th class="col-price">ĐƠN GIÁ</th>
+              <th class="col-qty">SL</th>
+              <th class="col-total">THÀNH TIỀN</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="flex: 1 0 0; min-height: 14px;"></div>
+
+      <!-- SUMMARY & VIETQR -->
+      <div class="bottom-grid">
+        <div class="vietqr-box">
+          <div class="qr-title">
+            <svg class="qr-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            THANH TOÁN NHANH (VIETQR)
+          </div>
+          <div class="qr-wrap">
+            ${payment.qrUrl ? `<div class="qr-img-box"><img src="${payment.qrUrl}" alt="VietQR" class="qr-img" /></div>` : ''}
+            <div class="qr-info">
+              <div><span class="qr-info-label">Ngân hàng:</span> <span class="qr-info-val">${payment.bankName}</span></div>
+              <div><span class="qr-info-label">Chủ TK:</span> <span class="qr-info-val">${payment.accountName}</span></div>
+              <div><span class="qr-info-label">Số TK:</span> <span class="qr-acc-no">${payment.accountNo}</span></div>
+              <div class="qr-divider"></div>
+              <div class="qr-memo">
+                <span class="qr-info-label">Nội dung CK:</span><br/>
+                <span style="font-weight: 600; color: #101828;">${payment.transferMemo}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="summary-box" style="width: 100%;">
+            <div>
+              <div class="sum-row"><span class="sum-label">Tạm tính</span><span class="sum-val">${this.formatCurrency(invoice.subtotal)}</span></div>
+              <div class="sum-row">
+                <span class="sum-label" style="color: ${combinedDiscountTotal > 0 ? '#DC2626' : '#475467'};">Giảm giá</span>
+                <span class="sum-val" style="color: ${combinedDiscountTotal > 0 ? '#DC2626' : '#475467'};">${combinedDiscountTotal > 0 ? '-' + this.formatCurrency(combinedDiscountTotal) : '0 đ'}</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="sum-divider"></div>
+              <div class="sum-row grand">
+                <span class="grand-label">TỔNG GIÁ TRỊ</span>
+                <span class="grand-val">${this.formatCurrency(invoice.grandTotal)}</span>
+              </div>
+              <div class="words-text">(Bằng chữ: ${amountInWords})</div>
+              <div class="sum-divider"></div>
+
+              <div class="sum-row paid-row">
+                <span><svg style="width:14px;height:14px;color:#16A34A;vertical-align:middle;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Đã thanh toán</span>
+                <span class="paid-val">-${this.formatCurrency(invoice.totalPaid)}</span>
+              </div>
+
+              ${invoice.remainingAmount > 0 ? `
+              <div class="sum-row debt-row" style="margin-top: 4px;">
+                <span><svg style="width:14px;height:14px;color:#FF6500;vertical-align:middle;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> CÒN NỢ</span>
+                <span class="debt-val">${this.formatCurrency(invoice.remainingAmount)}</span>
+              </div>
+              ` : `
+              <div class="sum-row paid-row" style="margin-top: 4px;">
+                <span><svg style="width:14px;height:14px;color:#16A34A;vertical-align:middle;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Trạng thái</span>
+                <span class="paid-val">ĐÃ THANH TOÁN ĐỦ</span>
+              </div>
+              `}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div> <!-- END doc-body-wrap -->
+
+      <div class="doc-footer-wrap">
+        <!-- POLICY STRIP -->
+        ${this.renderPolicyStrip(settings)}
+
+        <!-- SHARED FOOTER -->
+        ${footerHtml}
       </div>
     </div>
-
-    <!-- CUSTOMER & INVOICE META CARD -->
-    <div class="customer-card">
-      <div class="info-column">
-        <div class="info-title">THÔNG TIN KHÁCH HÀNG</div>
-        <div class="info-row"><span class="info-label">Khách hàng:</span> <span class="info-value">${invoice.customer.name}</span></div>
-        <div class="info-row"><span class="info-label">Điện thoại:</span> <span class="info-value">${invoice.customer.phone || '---'}</span></div>
-        <div class="info-row"><span class="info-label">Địa chỉ:</span> <span class="info-value">${invoice.customer.address || '---'}</span></div>
-      </div>
-
-      <div class="info-column">
-        <div class="info-title">THÔNG TIN ĐƠN HÀNG</div>
-        <div class="info-row"><span class="info-label">Ngày tạo:</span> <span class="info-value">${this.formatDate(invoice.createdDate)}</span></div>
-        <div class="info-row"><span class="info-label">Người lập:</span> <span class="info-value">${invoice.createdBy}</span></div>
-        <div class="info-row">
-          <span class="info-label">Trạng thái:</span>
-          <span class="info-value" style="color: ${isPaidInFull ? '#16a34a' : '#d97706'}; font-weight: 800;">
-            ${isPaidInFull ? 'ĐÃ THANH TOÁN' : 'CÒN NỢ'}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- PRODUCT LIST CONTAINER -->
-    <div class="product-list-container">
-      ${itemsHtml}
-      ${paymentsHtml}
-    </div>
-
-    <!-- BOTTOM FINANCIALS SECTION -->
-    <div class="bottom-section">
-      <div class="financials-card">
-
-        <!-- PAYMENT QR -->
-        <div class="payment-qr-column">
-          ${payment.qrUrl
-            ? `<img src="${payment.qrUrl}" alt="VietQR" class="qr-image" />`
-            : `<div class="qr-image" style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#94a3b8;">QR</div>`}
-          <div class="qr-text">
-            <div class="qr-bank-title">${payment.bankName}</div>
-            <div class="qr-acc-num">${payment.accountNo}</div>
-            <div>Chủ TK: <strong>${payment.accountName || 'NP COMPUTER'}</strong></div>
-            <div style="margin-top: 3px; font-size: 8px; color: #64748b;">Nội dung: <span class="font-mono" style="font-weight:700;">${payment.transferMemo}</span></div>
-          </div>
-        </div>
-
-        <!-- TOTALS BREAKDOWN -->
-        <div class="totals-column">
-          <div class="totals-row">
-            <span>Tạm tính (Subtotal):</span>
-            <span>${this.formatCurrency(invoice.subtotal)}</span>
-          </div>
-
-          ${combinedDiscountTotal > 0 ? `
-          <div class="totals-row" style="color: #ef4444;">
-            <span>Chiết khấu:</span>
-            <span>-${this.formatCurrency(combinedDiscountTotal)}</span>
-          </div>
-          ` : ''}
-
-          ${invoice.shippingFee > 0 ? `
-          <div class="totals-row">
-            <span>Phí vận chuyển:</span>
-            <span>+${this.formatCurrency(invoice.shippingFee)}</span>
-          </div>
-          ` : ''}
-
-          ${invoice.vatEnabled ? `
-          <div class="totals-row">
-            <span>Thuế VAT (${invoice.vatPercent}%):</span>
-            <span>+${this.formatCurrency(invoice.vatAmount)}</span>
-          </div>
-          ` : ''}
-
-          <div class="totals-row grand">
-            <span class="grand-total-label">TỔNG CỘNG:</span>
-            <span class="grand-total-amount">${this.formatCurrency(invoice.grandTotal)}</span>
-          </div>
-
-          <div class="totals-row paid-row" style="margin-top: 4px;">
-            <span>Đã thanh toán:</span>
-            <span>-${this.formatCurrency(invoice.totalPaid)}</span>
-          </div>
-
-          <div class="totals-row debt-row">
-            <span>CÒN NỢ:</span>
-            <span>${this.formatCurrency(invoice.remainingAmount)}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- TERMS -->
-      <div class="terms-card">
-        <ul class="terms-list">
-          <li>✓ Hóa đơn bán hàng nội bộ của cửa hàng máy tính.</li>
-          <li>✓ Bảo hành theo tem và serial number của cửa hàng.</li>
-          <li>✓ Không bảo hành do rơi vỡ, cháy nổ hoặc vào nước.</li>
-          <li>✓ Quý khách vui lòng kiểm tra sản phẩm trước khi thanh toán.</li>
-        </ul>
-      </div>
-
-      <!-- FOOTER -->
-      <div class="footer">
-        <div class="footer-left">Cảm ơn Quý khách đã mua hàng tại NP Computer.</div>
-        <div class="footer-right">
-          ${settings.website || 'npcomputer.vn'}  •  Hotline: ${settings.hotline || '0901.234.567'}
-        </div>
-      </div>
-
-    </div>
-
-  </div>
-</body>
-</html>`;
+  </body>
+  </html>`;
     }
 }
 exports.PdfService = PdfService;

@@ -62,14 +62,10 @@ const purchaseItemSchema = new mongoose_1.Schema({
     total: { type: Number, required: true, min: 0 },
 }, { _id: false });
 const purchaseSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     purchaseCode: {
         type: String,
         required: true,
+        unique: true,
     },
     supplierId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -105,7 +101,6 @@ const purchaseSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-purchaseSchema.index({ ownerId: 1, purchaseCode: 1 }, { unique: true });
 purchaseSchema.index({
     purchaseCode: 'text',
     'supplier.name': 'text',
@@ -113,17 +108,14 @@ purchaseSchema.index({
 });
 exports.Purchase = mongoose_1.default.model('Purchase', purchaseSchema);
 /**
- * Generates purchase code formatted: PNYYYYMM0001 per owner
+ * Generates purchase code formatted: PNYYYYMM0001
  */
-async function generatePurchaseCode(ownerId) {
+async function generatePurchaseCode() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const datePrefix = `PN${year}${month}`;
-    const filter = { purchaseCode: new RegExp(`^${datePrefix}`) };
-    if (ownerId)
-        filter.ownerId = ownerId;
-    const latest = await exports.Purchase.findOne(filter)
+    const latest = await exports.Purchase.findOne({ purchaseCode: new RegExp(`^${datePrefix}`) })
         .sort({ purchaseCode: -1 })
         .exec();
     if (!latest) {

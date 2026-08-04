@@ -9,5 +9,9 @@ router.get('/', controller.get);
 router.put('/', controller.update);
 router.post('/logo', upload.single('logo'), controller.uploadLogo);
 router.post('/qr', upload.single('qr'), controller.uploadQR);
+router.post('/signature', upload.single('signature'), controller.uploadSignature);
+router.post('/stamp', upload.single('stamp'), controller.uploadStamp);
+router.post('/thank-you', upload.single('thankYou'), controller.uploadThankYou);
+router.delete('/asset/:assetType', controller.deleteAsset);
 
 export default router;

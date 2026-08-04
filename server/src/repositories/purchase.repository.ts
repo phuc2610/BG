@@ -25,7 +25,6 @@ export class PurchaseRepository extends BaseRepository<IPurchaseDocument> {
 
     if (supplierId) filter.supplierId = supplierId;
     if (status) filter.status = status;
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     if (startDate || endDate) {
       filter.purchaseDate = {};

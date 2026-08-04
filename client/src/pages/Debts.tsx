@@ -234,11 +234,23 @@ export function Debts() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center text-xs">
-                        <p className="font-semibold">{formatDate(d.dueDate)}</p>
+                        <p className="font-semibold text-[rgb(var(--foreground))]">{formatDate(d.dueDate)}</p>
                         {d.overdueDays > 0 ? (
-                          <span className="text-[10px] font-bold text-red-500">Quá {d.overdueDays} ngày</span>
+                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">
+                            🔴 Quá {d.overdueDays} ngày
+                          </span>
+                        ) : d.debtStatus === 'PAID' ? (
+                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-500">
+                            🟢 Đã hoàn thành
+                          </span>
+                        ) : d.remainingDays <= 3 ? (
+                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                            🟡 Còn {d.remainingDays} ngày
+                          </span>
                         ) : (
-                          <span className="text-[10px] text-[rgb(var(--muted-foreground))]">Trong hạn</span>
+                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-500">
+                            🟢 Còn {d.remainingDays} ngày
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-center">

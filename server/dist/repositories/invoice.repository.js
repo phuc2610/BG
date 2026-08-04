@@ -13,8 +13,6 @@ class InvoiceRepository extends base_repository_1.BaseRepository {
         const filter = {};
         if (status)
             filter.status = status;
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         if (startDate || endDate) {
             filter.createdDate = {};
             if (startDate)
@@ -55,11 +53,8 @@ class InvoiceRepository extends base_repository_1.BaseRepository {
             },
         };
     }
-    async getStats(ownerId) {
-        const filter = { status: { $ne: types_1.InvoiceStatus.CANCELLED } };
-        if (ownerId)
-            filter.ownerId = ownerId;
-        const activeInvoices = await this.model.find(filter).exec();
+    async getStats() {
+        const activeInvoices = await this.model.find({ status: { $ne: types_1.InvoiceStatus.CANCELLED } }).exec();
         const totalInvoices = activeInvoices.length;
         let totalRevenue = 0;
         let totalPaid = 0;

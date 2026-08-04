@@ -35,14 +35,13 @@ export class QuoteService {
     };
     createdBy?: string;
     notes?: string;
-    ownerId?: string;
   }) {
-    const quoteCode = await generateQuoteCode(data.ownerId);
+    const quoteCode = await generateQuoteCode();
 
     let customerId: string | undefined;
     if (data.customer && data.customer.name) {
       try {
-        const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy, data.ownerId);
+        const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy);
         customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
       } catch (err) {
         console.error('Error auto-linking customer for quote:', err);
@@ -50,7 +49,6 @@ export class QuoteService {
     }
 
     const quote = await quoteRepo.create({
-      ownerId: data.ownerId as any,
       quoteCode,
       customerId,
       createdDate: new Date(),

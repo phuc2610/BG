@@ -10,7 +10,6 @@ import {
 } from '../types';
 
 export interface IInvoiceDocument extends Document {
-  ownerId?: mongoose.Types.ObjectId;
   invoiceCode: string;
   quoteId?: mongoose.Types.ObjectId;
   quoteCode?: string;
@@ -111,14 +110,10 @@ const invoiceItemSchema = new Schema<IInvoiceItem>(
 
 const invoiceSchema = new Schema<IInvoiceDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     invoiceCode: {
       type: String,
       required: true,
+      unique: true,
     },
     quoteId: {
       type: Schema.Types.ObjectId,
@@ -193,8 +188,6 @@ const invoiceSchema = new Schema<IInvoiceDocument>(
   }
 );
 
-invoiceSchema.index({ ownerId: 1, invoiceCode: 1 }, { unique: true });
-
 invoiceSchema.index({
   invoiceCode: 'text',
   quoteCode: 'text',
@@ -205,19 +198,16 @@ invoiceSchema.index({
 export const Invoice = mongoose.model<IInvoiceDocument>('Invoice', invoiceSchema);
 
 /**
- * Generates invoice code formatted: HDYYYYMMDD0001 per owner
+ * Generates invoice code formatted: HDYYYYMMDD0001
  */
-export async function generateInvoiceCode(ownerId?: any): Promise<string> {
+export async function generateInvoiceCode(): Promise<string> {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   const datePrefix = `HD${year}${month}${day}`;
 
-  const filter: any = { invoiceCode: new RegExp(`^${datePrefix}`) };
-  if (ownerId) filter.ownerId = ownerId;
-
-  const latest = await Invoice.findOne(filter)
+  const latest = await Invoice.findOne({ invoiceCode: new RegExp(`^${datePrefix}`) })
     .sort({ invoiceCode: -1 })
     .exec();
 

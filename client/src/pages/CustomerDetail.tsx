@@ -385,44 +385,96 @@ export function CustomerDetail() {
         {/* TAB 5: CÔNG NỢ */}
         {activeTab === 'debts' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold">Khoản Công Nợ Hiện Tại</h3>
-              <span className="text-sm font-extrabold text-amber-500">
-                Tổng Nợ: {formatCurrency(customer.totalDebt || 0)}
-              </span>
+            <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-[rgb(var(--border))]">
+              <div>
+                <h3 className="font-bold text-base text-[rgb(var(--foreground))]">
+                  Chi Tiết Các Khoản Công Nợ Bán Hàng Phải Thu
+                </h3>
+                <p className="text-xs text-[rgb(var(--muted-foreground))]">
+                  Liệt kê các hóa đơn chưa thu hết tiền, thời hạn thanh toán và số ngày còn lại/quá hạn
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-[rgb(var(--muted-foreground))]">Tổng Công Nợ Phải Thu Khách Hàng</div>
+                <div className="text-2xl font-bold text-amber-500">
+                  {formatCurrency(customer.totalDebt || 0)}
+                </div>
+              </div>
             </div>
 
             {activeDebts.length === 0 ? (
-              <div className="text-center py-12 text-emerald-500">
-                <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-80" />
-                <p className="font-bold text-base">Khách hàng không còn khoản nợ nào!</p>
+              <div className="p-8 text-center text-emerald-500 font-semibold text-sm bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+                ✓ Khách hàng này hiện không còn khoản nợ nào với cửa hàng
               </div>
             ) : (
               <div className="space-y-3">
-                {activeDebts.map((inv) => (
-                  <div key={inv._id} className="flex items-center justify-between p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold font-mono text-blue-500 text-sm">{inv.invoiceCode}</span>
-                        <span className="text-xs text-[rgb(var(--muted-foreground))]">Ngày tạo: {formatDate(inv.createdDate)}</span>
-                      </div>
-                      <p className="text-xs text-[rgb(var(--muted-foreground))] mt-1">
-                        Tổng tiền: {formatCurrency(inv.grandTotal)} • Đã trả: <strong className="text-emerald-500">{formatCurrency(inv.totalPaid)}</strong>
-                      </p>
-                    </div>
+                {activeDebts
+                  .sort((a, b) => b.remainingAmount - a.remainingAmount)
+                  .map((inv) => {
+                    const dueDateObj = inv.dueDate ? new Date(inv.dueDate) : new Date(new Date(inv.createdDate).getTime() + 14 * 86400000);
+                    const diffTime = Date.now() - dueDateObj.getTime();
+                    const isOverdue = diffTime > 0;
+                    const overdueDays = isOverdue ? Math.ceil(diffTime / (1000 * 3600 * 24)) : 0;
+                    const remainingDays = !isOverdue ? Math.ceil(Math.abs(diffTime) / (1000 * 3600 * 24)) : 0;
 
-                    <div className="text-right">
-                      <p className="text-xs text-[rgb(var(--muted-foreground))]">Còn nợ phải thu</p>
-                      <p className="text-lg font-extrabold text-amber-500">{formatCurrency(inv.remainingAmount)}</p>
-                      <button
-                        onClick={() => navigate(`/invoices/${inv._id}`)}
-                        className="mt-1 text-xs font-semibold text-blue-500 hover:underline"
+                    return (
+                      <div
+                        key={inv._id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          isOverdue
+                            ? 'bg-red-500/5 border-red-500/30'
+                            : 'bg-amber-500/5 border-amber-500/20'
+                        }`}
                       >
-                        Ghi nhận thanh toán →
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-mono font-bold text-sm text-blue-500">
+                              {inv.invoiceCode}
+                            </span>
+                            <span className="text-xs text-[rgb(var(--muted-foreground))]">
+                              Ngày lập: {formatDate(inv.createdDate)}
+                            </span>
+                            <span className="text-xs text-[rgb(var(--muted-foreground))]">
+                              • Hạn thanh toán: <strong>{formatDate(dueDateObj)}</strong>
+                            </span>
+
+                            {isOverdue ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20">
+                                🔴 Quá {overdueDays} ngày
+                              </span>
+                            ) : remainingDays <= 3 ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                🟡 Còn {remainingDays} ngày
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500">
+                                🟢 Còn {remainingDays} ngày
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[rgb(var(--muted-foreground))] mt-1">
+                            Tổng giá trị đơn: <strong>{formatCurrency(inv.grandTotal)}</strong> • Đã thanh toán: <strong className="text-emerald-500">{formatCurrency(inv.totalPaid)}</strong>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-4 justify-between md:justify-end">
+                          <div className="text-right">
+                            <span className="text-[11px] text-[rgb(var(--muted-foreground))] block">Còn nợ đợt này</span>
+                            <span className="text-lg font-extrabold text-amber-500">
+                              {formatCurrency(inv.remainingAmount)}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => navigate(`/invoices/${inv._id}`)}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold hover:opacity-90 transition-all shadow-md shadow-emerald-500/20 whitespace-nowrap"
+                          >
+                            Thu Nợ Đơn Này
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>

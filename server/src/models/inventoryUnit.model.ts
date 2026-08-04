@@ -2,7 +2,6 @@ import mongoose, { Schema, Document } from 'mongoose';
 import { InventoryUnitStatus, ProductCondition } from '../types';
 
 export interface IInventoryUnitDocument extends Document {
-  ownerId?: mongoose.Types.ObjectId;
   productId: mongoose.Types.ObjectId;
   productCode: string;
   productName: string;
@@ -29,11 +28,6 @@ export interface IInventoryUnitDocument extends Document {
 
 const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
   {
-    ownerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-    },
     productId: {
       type: Schema.Types.ObjectId,
       ref: 'Product',
@@ -53,6 +47,7 @@ const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
     serialNumber: {
       type: String,
       required: true,
+      unique: true,
     },
     purchaseId: {
       type: Schema.Types.ObjectId,
@@ -121,8 +116,6 @@ const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
     toObject: { virtuals: true },
   }
 );
-
-inventoryUnitSchema.index({ ownerId: 1, serialNumber: 1 }, { unique: true });
 
 inventoryUnitSchema.index({
   serialNumber: 'text',

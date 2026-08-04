@@ -18,8 +18,7 @@ export class PurchaseController {
   // GET /api/purchases/stats
   getStats = asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query as any;
-    const ownerId = (req as any).user?.id || (req.query as any).ownerId;
-    const stats = await purchaseService.getPurchaseStats(startDate, endDate, ownerId);
+    const stats = await purchaseService.getPurchaseStats(startDate, endDate);
     res.json({ success: true, data: stats });
   });
 
@@ -32,8 +31,7 @@ export class PurchaseController {
 
   // POST /api/purchases
   create = asyncHandler(async (req: Request, res: Response) => {
-    const ownerId = (req as any).user?.id || (req.body as any).ownerId;
-    const purchase = await purchaseService.create({ ...req.body, ownerId });
+    const purchase = await purchaseService.create(req.body);
     res.status(201).json({ success: true, data: purchase });
   });
 

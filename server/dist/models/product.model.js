@@ -58,18 +58,15 @@ const productSpecsSchema = new mongoose_1.Schema({
     notes: String,
 }, { _id: false });
 const productSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     productId: {
         type: String,
         required: true,
+        unique: true,
     },
     productCode: {
         type: String,
         required: true,
+        unique: true,
     },
     barcode: {
         type: String,
@@ -109,8 +106,6 @@ const productSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-productSchema.index({ ownerId: 1, productCode: 1 }, { unique: true });
-productSchema.index({ ownerId: 1, productId: 1 }, { unique: true });
 productSchema.index({
     name: 'text',
     productCode: 'text',

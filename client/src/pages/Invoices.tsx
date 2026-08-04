@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import {
   Search, Receipt, Plus, Eye, Trash2, ChevronLeft, ChevronRight,
   TrendingUp, CreditCard, AlertCircle, FileCheck, Calendar, DollarSign,
-  User, ArrowRight, ShieldCheck, CheckCircle2,
+  User, ArrowRight, ShieldCheck, CheckCircle2, Printer,
 } from 'lucide-react';
 
 export function Invoices() {
@@ -237,6 +237,17 @@ export function Invoices() {
                       </td>
                       <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const apiUrl = import.meta.env.VITE_API_URL || '/api';
+                              window.open(`${apiUrl}/pdf/invoices/${inv._id}/html`, '_blank');
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500"
+                            title="In hóa đơn trực tiếp"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => navigate(`/invoices/${inv._id}`)}
                             className="p-1.5 rounded-lg hover:bg-[rgb(var(--accent))] text-blue-500"

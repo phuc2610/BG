@@ -4,7 +4,7 @@ import { ProductFilterQuery, PaginatedResponse } from '../types';
 export declare class ProductRepository extends BaseRepository<IProductDocument> {
     constructor();
     search(query: ProductFilterQuery): Promise<PaginatedResponse<IProductDocument>>;
-    getStats(ownerId?: string): Promise<{
+    getStats(): Promise<{
         totalProducts: number;
         totalInventoryItems: number;
         totalStockQuantity: number;
@@ -14,6 +14,6 @@ export declare class ProductRepository extends BaseRepository<IProductDocument> 
         byCategory: Record<string, number>;
         byCondition: Record<string, number>;
     }>;
-    getBrands(ownerId?: string): Promise<string[]>;
+    getBrands(): Promise<string[]>;
 }
 //# sourceMappingURL=product.repository.d.ts.map

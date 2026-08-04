@@ -20,8 +20,6 @@ class QuoteRepository extends base_repository_1.BaseRepository {
         }
         if (status)
             filter.status = status;
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         if (startDate || endDate) {
             filter.createdDate = {};
             if (startDate)

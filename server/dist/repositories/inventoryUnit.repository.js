@@ -16,8 +16,6 @@ class InventoryUnitRepository extends base_repository_1.BaseRepository {
             filter.supplierId = supplierId;
         if (status)
             filter.status = status;
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         const now = new Date();
         if (warrantyFilter === 'expired') {
             filter.supplierWarrantyEndDate = { $lte: now };

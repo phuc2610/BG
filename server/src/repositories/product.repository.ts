@@ -38,12 +38,11 @@ export class ProductRepository extends BaseRepository<IProductDocument> {
 
     if (category) filter.category = category;
     if (brand) filter.brand = new RegExp(brand, 'i');
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     return this.findPaginated(filter, page, limit, sort, order);
   }
 
-  async getStats(ownerId?: string): Promise<{
+  async getStats(): Promise<{
     totalProducts: number;
     totalInventoryItems: number;
     totalStockQuantity: number;
@@ -53,11 +52,6 @@ export class ProductRepository extends BaseRepository<IProductDocument> {
     byCategory: Record<string, number>;
     byCondition: Record<string, number>;
   }> {
-    const filter: any = {};
-    if (ownerId) filter.ownerId = ownerId;
-    const matchStage = ownerId ? [{ $match: { ownerId } }] : [];
-    const quoteMatchStage = ownerId ? [{ $match: { status: QuoteStatus.CONFIRMED, ownerId } }] : [{ $match: { status: QuoteStatus.CONFIRMED } }];
-
     const [
       totalProducts,
       totalInventoryItems,
@@ -66,13 +60,13 @@ export class ProductRepository extends BaseRepository<IProductDocument> {
       conditionStats,
       financialStats,
     ] = await Promise.all([
-      this.model.countDocuments(filter),
-      Inventory.countDocuments(filter),
-      Inventory.aggregate([...matchStage, { $group: { _id: null, totalQty: { $sum: '$quantity' } } }]),
-      this.aggregate([...matchStage, { $group: { _id: '$category', count: { $sum: 1 } } }]),
-      Inventory.aggregate([...matchStage, { $group: { _id: '$condition', count: { $sum: 1 } } }]),
+      this.model.countDocuments({}),
+      Inventory.countDocuments({}),
+      Inventory.aggregate([{ $group: { _id: null, totalQty: { $sum: '$quantity' } } }]),
+      this.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+      Inventory.aggregate([{ $group: { _id: '$condition', count: { $sum: 1 } } }]),
       Quote.aggregate([
-        ...quoteMatchStage,
+        { $match: { status: QuoteStatus.CONFIRMED } },
         {
           $group: {
             _id: null,
@@ -111,9 +105,7 @@ export class ProductRepository extends BaseRepository<IProductDocument> {
     };
   }
 
-  async getBrands(ownerId?: string): Promise<string[]> {
-    const filter: any = {};
-    if (ownerId) filter.ownerId = ownerId;
-    return this.model.distinct('brand', filter).exec();
+  async getBrands(): Promise<string[]> {
+    return this.model.distinct('brand', {}).exec();
   }
 }

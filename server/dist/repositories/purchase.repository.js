@@ -14,8 +14,6 @@ class PurchaseRepository extends base_repository_1.BaseRepository {
             filter.supplierId = supplierId;
         if (status)
             filter.status = status;
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         if (startDate || endDate) {
             filter.purchaseDate = {};
             if (startDate)

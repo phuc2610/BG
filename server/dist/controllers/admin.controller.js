@@ -1,19 +1,37 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const models_1 = require("../models");
 const middleware_1 = require("../middleware");
 class AdminController {
     // GET /api/admin/users
-    getUsers = (0, middleware_1.asyncHandler)(async (_req, res) => {
-        const users = await models_1.User.find({ role: models_1.UserRole.USER })
+    getUsers = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const { search, status, sort } = req.query;
+        const filter = { role: models_1.UserRole.USER };
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+        if (search && search.trim()) {
+            filter.username = new RegExp(search.trim(), 'i');
+        }
+        let sortObj = { registeredAt: -1 };
+        if (sort === 'oldest')
+            sortObj = { registeredAt: 1 };
+        else if (sort === 'last_login')
+            sortObj = { lastLoginAt: -1 };
+        const users = await models_1.User.find(filter)
             .select('-passwordHash')
-            .sort({ registeredAt: -1 })
+            .sort(sortObj)
             .exec();
-        const totalUsers = users.length;
-        const activeUsers = users.filter((u) => u.status === models_1.UserStatus.ACTIVE).length;
-        const pendingUsers = users.filter((u) => u.status === models_1.UserStatus.PENDING).length;
-        const blockedUsers = users.filter((u) => u.status === models_1.UserStatus.BLOCKED).length;
+        const allUsers = await models_1.User.find({ role: models_1.UserRole.USER }).exec();
+        const totalUsers = allUsers.length;
+        const activeUsers = allUsers.filter((u) => u.status === models_1.UserStatus.ACTIVE).length;
+        const pendingUsers = allUsers.filter((u) => u.status === models_1.UserStatus.PENDING).length;
+        const blockedUsers = allUsers.filter((u) => u.status === models_1.UserStatus.BLOCKED).length;
         res.json({
             success: true,
             data: {
@@ -24,6 +42,52 @@ class AdminController {
                     blockedUsers,
                 },
                 users,
+            },
+        });
+    });
+    // GET /api/admin/users/:id/permissions
+    getUserPermissions = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const { id } = req.params;
+        const user = await models_1.User.findById(id).select('-passwordHash').exec();
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Tài khoản không tồn tại' });
+        }
+        res.json({
+            success: true,
+            data: {
+                _id: user._id,
+                username: user.username,
+                role: user.role,
+                status: user.status,
+                isActive: user.isActive,
+                permissions: user.permissions || [],
+                maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,
+            },
+        });
+    });
+    // PUT /api/admin/users/:id/permissions
+    updateUserPermissions = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const { id } = req.params;
+        const { permissions, maxQuoteDiscountPercent } = req.body;
+        const user = await models_1.User.findById(id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Tài khoản không tồn tại' });
+        }
+        if (Array.isArray(permissions)) {
+            user.permissions = permissions;
+        }
+        if (typeof maxQuoteDiscountPercent === 'number') {
+            user.maxQuoteDiscountPercent = Math.max(0, maxQuoteDiscountPercent);
+        }
+        await user.save();
+        res.json({
+            success: true,
+            message: `Đã cập nhật quyền truy cập cho tài khoản ${user.username}.`,
+            data: {
+                _id: user._id,
+                username: user.username,
+                permissions: user.permissions,
+                maxQuoteDiscountPercent: user.maxQuoteDiscountPercent,
             },
         });
     });
@@ -74,6 +138,24 @@ class AdminController {
             success: true,
             message: `Đã mở khóa tài khoản ${user.username}.`,
             data: user,
+        });
+    });
+    // POST /api/admin/users/:id/reset-password
+    resetUserPassword = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const { id } = req.params;
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ success: false, message: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
+        }
+        const user = await models_1.User.findById(id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Tài khoản không tồn tại' });
+        }
+        user.passwordHash = await bcryptjs_1.default.hash(newPassword, 10);
+        await user.save();
+        res.json({
+            success: true,
+            message: `Đã đặt lại mật khẩu cho tài khoản ${user.username} thành công.`,
         });
     });
     // DELETE /api/admin/users/:id

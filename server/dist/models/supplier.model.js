@@ -37,14 +37,10 @@ exports.Supplier = void 0;
 exports.generateSupplierCode = generateSupplierCode;
 const mongoose_1 = __importStar(require("mongoose"));
 const supplierSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     supplierCode: {
         type: String,
         required: true,
+        unique: true,
     },
     name: {
         type: String,
@@ -78,7 +74,6 @@ const supplierSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-supplierSchema.index({ ownerId: 1, supplierCode: 1 }, { unique: true });
 supplierSchema.index({
     supplierCode: 'text',
     name: 'text',
@@ -87,13 +82,10 @@ supplierSchema.index({
 });
 exports.Supplier = mongoose_1.default.model('Supplier', supplierSchema);
 /**
- * Generates supplier code formatted: NCC000001, NCC000002... per owner
+ * Generates supplier code formatted: NCC000001, NCC000002...
  */
-async function generateSupplierCode(ownerId) {
-    const filter = { supplierCode: /^NCC\d+/ };
-    if (ownerId)
-        filter.ownerId = ownerId;
-    const latest = await exports.Supplier.findOne(filter)
+async function generateSupplierCode() {
+    const latest = await exports.Supplier.findOne({ supplierCode: /^NCC\d+/ })
         .sort({ supplierCode: -1 })
         .exec();
     if (!latest) {

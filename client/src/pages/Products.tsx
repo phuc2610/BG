@@ -203,33 +203,39 @@ export function Products() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {products.map((product, i) => (
-            <ProductCard
-              key={product._id}
-              product={product}
-              index={i}
-              onEdit={() => navigate(`/products/${product._id}`)}
-              onClone={() => handleClone(product._id)}
-              onDelete={() => handleDelete(product._id)}
-              activeMenu={activeMenu}
-              setActiveMenu={setActiveMenu}
-            />
-          ))}
+          {products.map((product, i) => {
+            const pId = typeof product._id === 'string' ? product._id : ((product._id as any)?.toString() || (product as any).id || String(product._id));
+            return (
+              <ProductCard
+                key={pId}
+                product={product}
+                index={i}
+                onEdit={() => navigate(`/products/${pId}`)}
+                onClone={() => handleClone(pId)}
+                onDelete={() => handleDelete(pId)}
+                activeMenu={activeMenu}
+                setActiveMenu={setActiveMenu}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className="space-y-2">
-          {products.map((product, i) => (
-            <ProductListItem
-              key={product._id}
-              product={product}
-              index={i}
-              onEdit={() => navigate(`/products/${product._id}`)}
-              onClone={() => handleClone(product._id)}
-              onDelete={() => handleDelete(product._id)}
-              activeMenu={activeMenu}
-              setActiveMenu={setActiveMenu}
-            />
-          ))}
+          {products.map((product, i) => {
+            const pId = typeof product._id === 'string' ? product._id : ((product._id as any)?.toString() || (product as any).id || String(product._id));
+            return (
+              <ProductListItem
+                key={pId}
+                product={product}
+                index={i}
+                onEdit={() => navigate(`/products/${pId}`)}
+                onClone={() => handleClone(pId)}
+                onDelete={() => handleDelete(pId)}
+                activeMenu={activeMenu}
+                setActiveMenu={setActiveMenu}
+              />
+            );
+          })}
         </div>
       )}
 

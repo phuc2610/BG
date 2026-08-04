@@ -32,7 +32,6 @@ export class QuoteRepository extends BaseRepository<IQuoteDocument> {
     }
 
     if (status) filter.status = status;
-    if ((query as any).ownerId) filter.ownerId = (query as any).ownerId;
 
     if (startDate || endDate) {
       filter.createdDate = {};

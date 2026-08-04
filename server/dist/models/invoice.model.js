@@ -83,14 +83,10 @@ const invoiceItemSchema = new mongoose_1.Schema({
     order: { type: Number, default: 0 },
 }, { _id: false });
 const invoiceSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     invoiceCode: {
         type: String,
         required: true,
+        unique: true,
     },
     quoteId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -162,7 +158,6 @@ const invoiceSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-invoiceSchema.index({ ownerId: 1, invoiceCode: 1 }, { unique: true });
 invoiceSchema.index({
     invoiceCode: 'text',
     quoteCode: 'text',
@@ -171,18 +166,15 @@ invoiceSchema.index({
 });
 exports.Invoice = mongoose_1.default.model('Invoice', invoiceSchema);
 /**
- * Generates invoice code formatted: HDYYYYMMDD0001 per owner
+ * Generates invoice code formatted: HDYYYYMMDD0001
  */
-async function generateInvoiceCode(ownerId) {
+async function generateInvoiceCode() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const datePrefix = `HD${year}${month}${day}`;
-    const filter = { invoiceCode: new RegExp(`^${datePrefix}`) };
-    if (ownerId)
-        filter.ownerId = ownerId;
-    const latest = await exports.Invoice.findOne(filter)
+    const latest = await exports.Invoice.findOne({ invoiceCode: new RegExp(`^${datePrefix}`) })
         .sort({ invoiceCode: -1 })
         .exec();
     if (!latest) {

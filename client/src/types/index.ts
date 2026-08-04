@@ -285,18 +285,38 @@ export interface InvoiceStats {
   averageInvoiceValue: number;
 }
 
+export interface BenefitItem {
+  id: string;
+  enabled: boolean;
+  title: string;
+  description: string;
+  sortOrder: number;
+}
+
 export interface Settings {
   _id: string;
   storeName: string;
+  tagline?: string;
   hotline: string;
   website?: string;
   facebook?: string;
   address: string;
   email?: string;
   logoUrl?: string;
+  logoPublicId?: string;
   qrPaymentUrl?: string;
+  qrPaymentPublicId?: string;
+  signatureUrl?: string;
+  signaturePublicId?: string;
+  stampUrl?: string;
+  stampPublicId?: string;
+  thankYouAssetUrl?: string;
+  thankYouAssetPublicId?: string;
+  signerName?: string;
+  signerTitle?: string;
   bankInfo?: string;
   terms: string[];
+  benefits?: BenefitItem[];
   footerText: string;
 }
 
@@ -381,16 +401,16 @@ export interface DebtRecord {
   totalPaid: number;
   remainingAmount: number;
   overdueDays: number;
+  remainingDays: number;
   debtStatus: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'DUE_SOON' | 'OVERDUE' | 'CANCELLED';
 }
 
 export interface CustomerStats {
   totalCustomers: number;
-  newThisMonth: number;
-  totalVip: number;
-  totalEnterprise: number;
-  customersWithDebt: number;
-  overdueCustomers: number;
+  totalRevenue: number;
+  totalPaid: number;
+  totalDebt: number;
+  totalProfit: number;
 }
 
 export interface DebtStats {
@@ -546,3 +566,185 @@ export interface PurchaseStats {
 }
 
 export type ViewMode = 'grid' | 'list';
+
+export interface UserAccount {
+  _id: string;
+  id?: string;
+  username: string;
+  role: 'ADMIN' | 'USER';
+  status: 'PENDING' | 'ACTIVE' | 'BLOCKED';
+  isActive: boolean;
+  permissions: string[];
+  maxQuoteDiscountPercent?: number;
+  registeredAt?: string;
+  activatedAt?: string;
+  lastLoginAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PermissionGroup {
+  id: string;
+  title: string;
+  permissions: {
+    key: string;
+    label: string;
+  }[];
+}
+
+export const PERMISSION_GROUPS: PermissionGroup[] = [
+  {
+    id: 'dashboard',
+    title: 'DASHBOARD',
+    permissions: [
+      { key: 'dashboard.view', label: 'Xem Dashboard' },
+      { key: 'dashboard.revenue', label: 'Xem doanh thu' },
+      { key: 'dashboard.profit', label: 'Xem lợi nhuận' },
+      { key: 'dashboard.inventory_value', label: 'Xem giá trị tồn kho' },
+      { key: 'dashboard.purchase_total', label: 'Xem tổng tiền nhập hàng' },
+      { key: 'dashboard.supplier_debt', label: 'Xem công nợ NCC' },
+      { key: 'dashboard.customer_debt', label: 'Xem công nợ khách hàng' },
+    ],
+  },
+  {
+    id: 'product_inventory',
+    title: 'SẢN PHẨM & KHO',
+    permissions: [
+      { key: 'product.view', label: 'Xem sản phẩm' },
+      { key: 'inventory.view', label: 'Xem tồn kho' },
+      { key: 'inventory.serial.view', label: 'Xem Serial' },
+      { key: 'inventory.condition.view', label: 'Xem tình trạng Serial' },
+      { key: 'product.sale_price.view', label: 'Xem giá bán' },
+      { key: 'inventory.cost.view', label: 'Xem giá nhập' },
+      { key: 'inventory.supplier.view', label: 'Xem NCC của Serial' },
+      { key: 'inventory.supplier_warranty.view', label: 'Xem bảo hành NCC' },
+      { key: 'product.create', label: 'Thêm sản phẩm' },
+      { key: 'product.edit', label: 'Sửa sản phẩm' },
+      { key: 'product.delete', label: 'Xóa sản phẩm' },
+      { key: 'inventory.adjust', label: 'Điều chỉnh tồn kho' },
+    ],
+  },
+  {
+    id: 'purchase',
+    title: 'NHẬP HÀNG',
+    permissions: [
+      { key: 'purchase.view', label: 'Xem phiếu nhập' },
+      { key: 'purchase.create', label: 'Tạo phiếu nhập' },
+      { key: 'purchase.edit', label: 'Sửa phiếu nhập' },
+      { key: 'purchase.delete', label: 'Xóa phiếu nhập' },
+      { key: 'purchase.cost.view', label: 'Xem giá nhập' },
+      { key: 'purchase.total.view', label: 'Xem tổng tiền nhập' },
+      { key: 'purchase.paid.view', label: 'Xem tiền đã trả NCC' },
+      { key: 'purchase.debt.view', label: 'Xem công nợ phiếu nhập' },
+      { key: 'purchase.payment.create', label: 'Thanh toán NCC' },
+    ],
+  },
+  {
+    id: 'supplier',
+    title: 'NHÀ CUNG CẤP',
+    permissions: [
+      { key: 'supplier.view', label: 'Xem NCC' },
+      { key: 'supplier.create', label: 'Thêm NCC' },
+      { key: 'supplier.edit', label: 'Sửa NCC' },
+      { key: 'supplier.delete', label: 'Xóa NCC' },
+      { key: 'supplier.purchase_history.view', label: 'Xem lịch sử nhập từ NCC' },
+      { key: 'supplier.purchase_total.view', label: 'Xem tổng tiền nhập từ NCC' },
+      { key: 'supplier.debt.view', label: 'Xem công nợ NCC' },
+      { key: 'supplier.payment.create', label: 'Ghi nhận thanh toán NCC' },
+    ],
+  },
+  {
+    id: 'customer',
+    title: 'KHÁCH HÀNG',
+    permissions: [
+      { key: 'customer.view', label: 'Xem khách hàng' },
+      { key: 'customer.create', label: 'Thêm khách hàng' },
+      { key: 'customer.edit', label: 'Sửa khách hàng' },
+      { key: 'customer.delete', label: 'Xóa khách hàng' },
+      { key: 'customer.purchase_history.view', label: 'Xem lịch sử mua hàng' },
+      { key: 'customer.debt.view', label: 'Xem công nợ khách' },
+      { key: 'customer.payment_history.view', label: 'Xem lịch sử thanh toán' },
+    ],
+  },
+  {
+    id: 'quote',
+    title: 'BÁO GIÁ',
+    permissions: [
+      { key: 'quote.view', label: 'Xem báo giá' },
+      { key: 'quote.create', label: 'Tạo báo giá' },
+      { key: 'quote.edit', label: 'Sửa báo giá' },
+      { key: 'quote.delete', label: 'Xóa báo giá' },
+      { key: 'quote.send', label: 'Gửi báo giá' },
+      { key: 'quote.finalize', label: 'Chốt báo giá' },
+      { key: 'quote.export_pdf', label: 'Xuất PDF' },
+      { key: 'quote.change_price', label: 'Chỉnh giá bán trên báo giá' },
+      { key: 'quote.discount', label: 'Giảm giá' },
+    ],
+  },
+  {
+    id: 'invoice',
+    title: 'HÓA ĐƠN',
+    permissions: [
+      { key: 'invoice.view', label: 'Xem hóa đơn' },
+      { key: 'invoice.create', label: 'Tạo hóa đơn' },
+      { key: 'invoice.edit', label: 'Sửa hóa đơn nháp' },
+      { key: 'invoice.delete_draft', label: 'Xóa hóa đơn nháp' },
+      { key: 'invoice.serial.select', label: 'Chọn Serial' },
+      { key: 'invoice.serial.change', label: 'Đổi Serial' },
+      { key: 'invoice.finalize', label: 'Chốt hóa đơn' },
+      { key: 'invoice.cancel', label: 'Hủy hóa đơn' },
+      { key: 'invoice.export_pdf', label: 'Xuất PDF hóa đơn' },
+    ],
+  },
+  {
+    id: 'payment_debt',
+    title: 'THANH TOÁN / CÔNG NỢ KHÁCH',
+    permissions: [
+      { key: 'payment.view', label: 'Xem số tiền khách đã thanh toán' },
+      { key: 'customer.debt.view', label: 'Xem công nợ khách' },
+      { key: 'customer.debt_due_date.view', label: 'Xem hạn thanh toán' },
+      { key: 'payment.create', label: 'Ghi nhận thanh toán' },
+      { key: 'customer.debt_due_date.edit', label: 'Sửa hạn công nợ' },
+    ],
+  },
+  {
+    id: 'warranty',
+    title: 'BẢO HÀNH',
+    permissions: [
+      { key: 'warranty.customer.view', label: 'Xem bảo hành khách hàng' },
+      { key: 'warranty.supplier.view', label: 'Xem bảo hành NCC' },
+      { key: 'warranty.supplier_expiry.view', label: 'Xem ngày hết BH NCC' },
+      { key: 'warranty.supplier_remaining.view', label: 'Xem số ngày BH NCC còn lại' },
+    ],
+  },
+  {
+    id: 'settings',
+    title: 'CÀI ĐẶT',
+    permissions: [
+      { key: 'settings.view', label: 'Xem cài đặt' },
+      { key: 'settings.store.edit', label: 'Sửa thông tin cửa hàng' },
+      { key: 'settings.quote_template.edit', label: 'Sửa mẫu báo giá' },
+      { key: 'settings.invoice_template.edit', label: 'Sửa mẫu hóa đơn' },
+      { key: 'settings.payment.edit', label: 'Sửa thông tin thanh toán / QR' },
+    ],
+  },
+];
+
+export const SALES_CTV_PRESET_PERMISSIONS = [
+  'dashboard.view',
+  'product.view',
+  'inventory.view',
+  'product.sale_price.view',
+  'customer.view',
+  'customer.create',
+  'quote.view',
+  'quote.create',
+  'quote.edit',
+  'quote.send',
+  'quote.export_pdf',
+  'quote.change_price',
+  'quote.discount',
+];
+
+export const MANAGER_PRESET_PERMISSIONS = PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
+

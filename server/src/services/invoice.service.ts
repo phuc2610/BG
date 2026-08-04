@@ -21,15 +21,15 @@ export class InvoiceService {
     return invoice;
   }
 
-  async getStats(ownerId?: string) {
-    return invoiceRepo.getStats(ownerId);
+  async getStats() {
+    return invoiceRepo.getStats();
   }
 
   /**
    * Creates a new DRAFT Invoice by copying data from a confirmed Quote.
    * Does NOT reduce stock or reserve serials yet.
    */
-  async createFromQuote(quoteId: string, createdBy: string = 'Admin', ownerId?: string) {
+  async createFromQuote(quoteId: string, createdBy: string = 'Admin') {
     const quote = await quoteRepo.findById(quoteId);
     if (!quote) throw new AppError('Báo giá không tồn tại', 404);
 
@@ -39,13 +39,12 @@ export class InvoiceService {
       if (existingInv) return existingInv;
     }
 
-    const targetOwnerId = ownerId || (quote.ownerId ? quote.ownerId.toString() : undefined);
-    const invoiceCode = await generateInvoiceCode(targetOwnerId);
+    const invoiceCode = await generateInvoiceCode();
 
     let customerId = quote.customerId ? quote.customerId.toString() : undefined;
     if (!customerId && quote.customer && quote.customer.name) {
       try {
-        const customerDoc = await customerService.findOrCreateCustomer(quote.customer, createdBy, targetOwnerId);
+        const customerDoc = await customerService.findOrCreateCustomer(quote.customer, createdBy);
         customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
       } catch (err) {
         console.error('Error auto-linking customer for invoice:', err);
@@ -75,7 +74,6 @@ export class InvoiceService {
     });
 
     const invoiceData = {
-      ownerId: targetOwnerId as any,
       invoiceCode,
       quoteId: quote._id,
       quoteCode: quote.quoteCode,
@@ -208,6 +206,22 @@ export class InvoiceService {
 
     // Save selectedSerials on invoice item
     item.selectedSerials = selectedSerials;
+
+    // Recalculate totalCost & profit from all selected serials across invoice lines
+    const allSelectedSerials: string[] = [];
+    for (const it of invoice.items) {
+      if (it.selectedSerials && it.selectedSerials.length > 0) {
+        allSelectedSerials.push(...it.selectedSerials);
+      }
+    }
+
+    if (allSelectedSerials.length > 0) {
+      const selectedUnits = await InventoryUnit.find({ serialNumber: { $in: allSelectedSerials } }).exec();
+      const currentCost = selectedUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+      invoice.totalCost = currentCost;
+      invoice.profit = invoice.grandTotal - currentCost;
+    }
+
     invoice.history.push({
       action: 'CHỌN_SERIAL_NHÁP',
       description: `Chọn ${selectedSerials.length}/${requiredQty} Serial cho ${item.productSnapshot.name}`,
@@ -298,6 +312,11 @@ export class InvoiceService {
         );
       }
     }
+
+    // Calculate actual totalCost & profit from physical serial purchase prices
+    const actualTotalCost = units.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+    invoice.totalCost = actualTotalCost;
+    invoice.profit = invoice.grandTotal - actualTotalCost;
 
     // 3. Customer payment & debt validation
     if (data?.paidAmount !== undefined) {

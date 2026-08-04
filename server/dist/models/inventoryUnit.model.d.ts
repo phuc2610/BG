@@ -1,7 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 import { InventoryUnitStatus, ProductCondition } from '../types';
 export interface IInventoryUnitDocument extends Document {
-    ownerId?: mongoose.Types.ObjectId;
     productId: mongoose.Types.ObjectId;
     productCode: string;
     productName: string;

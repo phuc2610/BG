@@ -1,7 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 import { ProductCategory, IProductImage, IProductSpecs } from '../types';
 export interface IProductDocument extends Document {
-    ownerId?: Schema.Types.ObjectId;
     productId: string;
     productCode: string;
     barcode: string;

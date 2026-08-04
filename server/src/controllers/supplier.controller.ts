@@ -16,9 +16,8 @@ export class SupplierController {
   });
 
   // GET /api/suppliers/stats
-  getStats = asyncHandler(async (req: any, res: Response) => {
-    const ownerId = req.user?.id || req.query?.ownerId;
-    const stats = await supplierService.getStats(ownerId);
+  getStats = asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await supplierService.getStats();
     res.json({ success: true, data: stats });
   });
 

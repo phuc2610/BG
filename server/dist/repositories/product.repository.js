@@ -29,24 +29,17 @@ class ProductRepository extends base_repository_1.BaseRepository {
             filter.category = category;
         if (brand)
             filter.brand = new RegExp(brand, 'i');
-        if (query.ownerId)
-            filter.ownerId = query.ownerId;
         return this.findPaginated(filter, page, limit, sort, order);
     }
-    async getStats(ownerId) {
-        const filter = {};
-        if (ownerId)
-            filter.ownerId = ownerId;
-        const matchStage = ownerId ? [{ $match: { ownerId } }] : [];
-        const quoteMatchStage = ownerId ? [{ $match: { status: types_1.QuoteStatus.CONFIRMED, ownerId } }] : [{ $match: { status: types_1.QuoteStatus.CONFIRMED } }];
+    async getStats() {
         const [totalProducts, totalInventoryItems, stockAgg, categoryStats, conditionStats, financialStats,] = await Promise.all([
-            this.model.countDocuments(filter),
-            models_1.Inventory.countDocuments(filter),
-            models_1.Inventory.aggregate([...matchStage, { $group: { _id: null, totalQty: { $sum: '$quantity' } } }]),
-            this.aggregate([...matchStage, { $group: { _id: '$category', count: { $sum: 1 } } }]),
-            models_1.Inventory.aggregate([...matchStage, { $group: { _id: '$condition', count: { $sum: 1 } } }]),
+            this.model.countDocuments({}),
+            models_1.Inventory.countDocuments({}),
+            models_1.Inventory.aggregate([{ $group: { _id: null, totalQty: { $sum: '$quantity' } } }]),
+            this.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+            models_1.Inventory.aggregate([{ $group: { _id: '$condition', count: { $sum: 1 } } }]),
             models_1.Quote.aggregate([
-                ...quoteMatchStage,
+                { $match: { status: types_1.QuoteStatus.CONFIRMED } },
                 {
                     $group: {
                         _id: null,
@@ -80,11 +73,8 @@ class ProductRepository extends base_repository_1.BaseRepository {
             byCondition,
         };
     }
-    async getBrands(ownerId) {
-        const filter = {};
-        if (ownerId)
-            filter.ownerId = ownerId;
-        return this.model.distinct('brand', filter).exec();
+    async getBrands() {
+        return this.model.distinct('brand', {}).exec();
     }
 }
 exports.ProductRepository = ProductRepository;

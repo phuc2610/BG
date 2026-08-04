@@ -4,11 +4,11 @@ import { AppError } from '../services/product.service';
 const storage = multer.memoryStorage();
 
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (allowedMimes.includes(file.mimetype)) {
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+  if (allowedMimes.includes(file.mimetype) || file.originalname.toLowerCase().endsWith('.svg')) {
     cb(null, true);
   } else {
-    cb(new AppError('Chỉ chấp nhận file ảnh (JPEG, PNG, WebP, GIF)', 400));
+    cb(new AppError('Chỉ chấp nhận file ảnh (JPEG, PNG, WebP, GIF, SVG)', 400));
   }
 };
 

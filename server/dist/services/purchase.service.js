@@ -46,7 +46,7 @@ class PurchaseService {
         const processedItems = [];
         let totalAmount = 0;
         const unitsToCreate = [];
-        const purchaseCode = await (0, models_1.generatePurchaseCode)(data.ownerId);
+        const purchaseCode = await (0, models_1.generatePurchaseCode)();
         const purchaseDate = data.purchaseDate ? new Date(data.purchaseDate) : new Date();
         for (const item of data.items) {
             const product = await productRepo.findById(item.productId);
@@ -94,7 +94,6 @@ class PurchaseService {
             // Prepare InventoryUnits to bulk insert
             for (const sn of parsedSerials) {
                 unitsToCreate.push({
-                    ownerId: data.ownerId,
                     productId: product._id,
                     productCode: product.productCode,
                     productName: product.name,
@@ -135,7 +134,6 @@ class PurchaseService {
             });
         }
         const purchase = await purchaseRepo.create({
-            ownerId: data.ownerId,
             purchaseCode,
             supplierId: supplier._id,
             supplier: {
@@ -212,10 +210,8 @@ class PurchaseService {
     /**
      * Calculates overall Purchase Financial Dashboard statistics.
      */
-    async getPurchaseStats(startDate, endDate, ownerId) {
+    async getPurchaseStats(startDate, endDate) {
         const filter = {};
-        if (ownerId)
-            filter.ownerId = ownerId;
         if (startDate || endDate) {
             filter.purchaseDate = {};
             if (startDate)
@@ -238,12 +234,9 @@ class PurchaseService {
             }
         }
         // Valuation of stock currently in warehouse at actual purchase price (AVAILABLE or RESERVED units)
-        const availableFilter = {
+        const availableUnits = await models_1.InventoryUnit.find({
             status: { $in: [types_1.InventoryUnitStatus.AVAILABLE, types_1.InventoryUnitStatus.RESERVED] },
-        };
-        if (ownerId)
-            availableFilter.ownerId = ownerId;
-        const availableUnits = await models_1.InventoryUnit.find(availableFilter).exec();
+        }).exec();
         const currentStockValuation = availableUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
         return {
             totalPurchasesAmount,

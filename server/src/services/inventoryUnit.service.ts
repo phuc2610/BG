@@ -26,11 +26,9 @@ export class InventoryUnitService {
     category?: ProductCategory;
     search?: string;
     warrantyStatus?: string;
-    ownerId?: string;
   }) {
     const filter: any = {};
     if (query.category) filter.category = query.category;
-    if (query.ownerId) filter.ownerId = query.ownerId;
 
     if (query.search && query.search.trim()) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
@@ -43,13 +41,10 @@ export class InventoryUnitService {
     }
 
     const products = await Product.find(filter).sort({ name: 1 }).exec();
-    const now = new Date();
 
     const result = await Promise.all(
       products.map(async (product) => {
-        const unitFilter: any = { productId: product._id };
-        if (query.ownerId) unitFilter.ownerId = query.ownerId;
-        const units = await InventoryUnit.find(unitFilter).exec();
+        const units = await InventoryUnit.find({ productId: product._id }).exec();
 
         const availableUnits = units.filter((u) => u.status === InventoryUnitStatus.AVAILABLE);
         const reservedUnits = units.filter((u) => u.status === InventoryUnitStatus.RESERVED);
@@ -91,9 +86,8 @@ export class InventoryUnitService {
    * Aggregates physical inventory grouped by PRODUCT and CONDITION.
    * Allows quoting exact product variants by condition (New, Like New, 99%...) with precise stock counts per condition.
    */
-  async getGroupedInventoryByCondition(query: { search?: string; ownerId?: string }) {
+  async getGroupedInventoryByCondition(query: { search?: string }) {
     const filter: any = {};
-    if (query.ownerId) filter.ownerId = query.ownerId;
     if (query.search && query.search.trim()) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       filter.$or = [
@@ -107,11 +101,9 @@ export class InventoryUnitService {
     const resultVariants: any[] = [];
 
     for (const product of products) {
-      const unitFilter: any = { productId: product._id };
-      if (query.ownerId) unitFilter.ownerId = query.ownerId;
-      const units = await InventoryUnit.find(unitFilter).exec();
-
+      const units = await InventoryUnit.find({ productId: product._id }).exec();
       const p = product as any;
+
       if (units.length === 0) {
         resultVariants.push({
           productId: product._id,
@@ -127,16 +119,16 @@ export class InventoryUnitService {
           specs: product.specs,
         });
       } else {
-        const conditionMap: Record<string, typeof units> = {};
+        const byConditionMap: Record<string, typeof units> = {};
         for (const u of units) {
           const cond = u.condition || 'New';
-          if (!conditionMap[cond]) conditionMap[cond] = [];
-          conditionMap[cond].push(u);
+          if (!byConditionMap[cond]) byConditionMap[cond] = [];
+          byConditionMap[cond].push(u);
         }
 
-        for (const [cond, condUnits] of Object.entries(conditionMap)) {
-          const availableUnits = condUnits.filter((u) => u.status === InventoryUnitStatus.AVAILABLE);
-          const reservedUnits = condUnits.filter((u) => u.status === InventoryUnitStatus.RESERVED);
+        for (const [cond, condUnits] of Object.entries(byConditionMap)) {
+          const avail = condUnits.filter((u) => u.status === InventoryUnitStatus.AVAILABLE).length;
+          const res = condUnits.filter((u) => u.status === InventoryUnitStatus.RESERVED).length;
 
           const sortedByDate = [...condUnits].sort(
             (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
@@ -149,8 +141,8 @@ export class InventoryUnitService {
             productName: product.name,
             category: product.category,
             condition: cond,
-            availableStock: availableUnits.length,
-            reservedStock: reservedUnits.length,
+            availableStock: avail,
+            reservedStock: res,
             costPrice: latestCostPrice,
             suggestedSellingPrice: p.sellingPrice || (latestCostPrice ? Math.round((latestCostPrice * 1.25) / 10000) * 10000 : 0),
             imageUrl: p.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
@@ -166,23 +158,17 @@ export class InventoryUnitService {
   /**
    * Returns individual physical serial units for a specific Product with calculated warranty days.
    */
-  async getUnitsByProduct(productId: string, ownerId?: string) {
+  async getUnitsByProduct(productId: string) {
     if (!productId || productId === 'undefined') return [];
 
     let filter: any = { productId };
-    if (ownerId) filter.ownerId = ownerId;
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      const pFilter: any = { productCode: productId };
-      if (ownerId) pFilter.ownerId = ownerId;
-
-      const p = await Product.findOne(pFilter);
+      const p = await Product.findOne({ productCode: productId });
       if (p) {
         filter = { productId: p._id };
-        if (ownerId) filter.ownerId = ownerId;
       } else {
         filter = { productCode: productId };
-        if (ownerId) filter.ownerId = ownerId;
       }
     }
 

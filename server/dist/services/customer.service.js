@@ -18,20 +18,19 @@ class CustomerService {
             throw new product_service_1.AppError('Khách hàng không tồn tại', 404);
         return customer;
     }
-    async getStats(ownerId) {
-        return customerRepo.getStats(ownerId);
+    async getStats() {
+        return customerRepo.getStats();
     }
     /**
      * Auto-links or creates a customer by Phone number or Name to prevent duplicate records.
      */
-    async findOrCreateCustomer(data, createdBy = 'Admin', ownerId) {
-        const targetOwnerId = ownerId || data.ownerId;
+    async findOrCreateCustomer(data, createdBy = 'Admin') {
         if (!data.name || !data.name.trim()) {
             throw new product_service_1.AppError('Tên khách hàng là bắt buộc', 400);
         }
         const phone = data.phone?.trim();
         if (phone) {
-            const existing = await customerRepo.findByPhone(phone, targetOwnerId);
+            const existing = await customerRepo.findByPhone(phone);
             if (existing) {
                 // Update existing customer info if missing
                 if (!existing.address && data.address)
@@ -44,9 +43,8 @@ class CustomerService {
                 return existing;
             }
         }
-        const customerCode = await (0, models_1.generateCustomerCode)(targetOwnerId);
+        const customerCode = await (0, models_1.generateCustomerCode)();
         const newCustomer = await customerRepo.create({
-            ownerId: targetOwnerId,
             customerCode,
             name: data.name.trim(),
             companyName: data.companyName?.trim(),
@@ -69,8 +67,8 @@ class CustomerService {
         });
         return newCustomer;
     }
-    async create(data, createdBy = 'Admin', ownerId) {
-        return this.findOrCreateCustomer(data, createdBy, ownerId);
+    async create(data, createdBy = 'Admin') {
+        return this.findOrCreateCustomer(data, createdBy);
     }
     async update(id, data) {
         const customer = await this.getById(id);

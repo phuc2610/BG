@@ -14,10 +14,13 @@ export enum UserStatus {
 export interface IUserDocument extends Document {
   username: string;
   usernameNormalized: string;
+  fullName: string;
   passwordHash: string;
   role: UserRole;
   status: UserStatus;
   isActive: boolean;
+  permissions: string[];
+  maxQuoteDiscountPercent: number;
   registeredAt: Date;
   activatedAt?: Date;
   lastLoginAt?: Date;
@@ -42,6 +45,11 @@ const UserSchema = new Schema<IUserDocument>(
       trim: true,
       lowercase: true,
     },
+    fullName: {
+      type: String,
+      default: 'Admin',
+      trim: true,
+    },
     passwordHash: {
       type: String,
       required: true,
@@ -59,6 +67,14 @@ const UserSchema = new Schema<IUserDocument>(
     isActive: {
       type: Boolean,
       default: false,
+    },
+    permissions: {
+      type: [String],
+      default: [],
+    },
+    maxQuoteDiscountPercent: {
+      type: Number,
+      default: 0,
     },
     registeredAt: {
       type: Date,

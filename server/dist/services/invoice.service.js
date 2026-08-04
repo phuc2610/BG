@@ -24,14 +24,14 @@ class InvoiceService {
             throw new product_service_1.AppError('Hóa đơn không tồn tại', 404);
         return invoice;
     }
-    async getStats(ownerId) {
-        return invoiceRepo.getStats(ownerId);
+    async getStats() {
+        return invoiceRepo.getStats();
     }
     /**
      * Creates a new DRAFT Invoice by copying data from a confirmed Quote.
      * Does NOT reduce stock or reserve serials yet.
      */
-    async createFromQuote(quoteId, createdBy = 'Admin', ownerId) {
+    async createFromQuote(quoteId, createdBy = 'Admin') {
         const quote = await quoteRepo.findById(quoteId);
         if (!quote)
             throw new product_service_1.AppError('Báo giá không tồn tại', 404);
@@ -41,12 +41,11 @@ class InvoiceService {
             if (existingInv)
                 return existingInv;
         }
-        const targetOwnerId = ownerId || (quote.ownerId ? quote.ownerId.toString() : undefined);
-        const invoiceCode = await (0, models_1.generateInvoiceCode)(targetOwnerId);
+        const invoiceCode = await (0, models_1.generateInvoiceCode)();
         let customerId = quote.customerId ? quote.customerId.toString() : undefined;
         if (!customerId && quote.customer && quote.customer.name) {
             try {
-                const customerDoc = await customerService.findOrCreateCustomer(quote.customer, createdBy, targetOwnerId);
+                const customerDoc = await customerService.findOrCreateCustomer(quote.customer, createdBy);
                 customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
             }
             catch (err) {
@@ -75,7 +74,6 @@ class InvoiceService {
             };
         });
         const invoiceData = {
-            ownerId: targetOwnerId,
             invoiceCode,
             quoteId: quote._id,
             quoteCode: quote.quoteCode,
@@ -177,6 +175,19 @@ class InvoiceService {
         }
         // Save selectedSerials on invoice item
         item.selectedSerials = selectedSerials;
+        // Recalculate totalCost & profit from all selected serials across invoice lines
+        const allSelectedSerials = [];
+        for (const it of invoice.items) {
+            if (it.selectedSerials && it.selectedSerials.length > 0) {
+                allSelectedSerials.push(...it.selectedSerials);
+            }
+        }
+        if (allSelectedSerials.length > 0) {
+            const selectedUnits = await models_1.InventoryUnit.find({ serialNumber: { $in: allSelectedSerials } }).exec();
+            const currentCost = selectedUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+            invoice.totalCost = currentCost;
+            invoice.profit = invoice.grandTotal - currentCost;
+        }
         invoice.history.push({
             action: 'CHỌN_SERIAL_NHÁP',
             description: `Chọn ${selectedSerials.length}/${requiredQty} Serial cho ${item.productSnapshot.name}`,
@@ -256,6 +267,10 @@ class InvoiceService {
                 throw new product_service_1.AppError(`Serial ${u.serialNumber} đã bị xuất bán hoặc không ở trạng thái sẵn sàng (Trạng thái: ${u.status})`, 400);
             }
         }
+        // Calculate actual totalCost & profit from physical serial purchase prices
+        const actualTotalCost = units.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+        invoice.totalCost = actualTotalCost;
+        invoice.profit = invoice.grandTotal - actualTotalCost;
         // 3. Customer payment & debt validation
         if (data?.paidAmount !== undefined) {
             invoice.totalPaid = Number(data.paidAmount);

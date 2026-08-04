@@ -50,14 +50,10 @@ const customerActivitySchema = new mongoose_1.Schema({
     createdAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 const customerSchema = new mongoose_1.Schema({
-    ownerId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true,
-    },
     customerCode: {
         type: String,
         required: true,
+        unique: true,
     },
     name: {
         type: String,
@@ -96,7 +92,6 @@ const customerSchema = new mongoose_1.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
-customerSchema.index({ ownerId: 1, customerCode: 1 }, { unique: true });
 customerSchema.index({
     customerCode: 'text',
     name: 'text',
@@ -106,13 +101,10 @@ customerSchema.index({
 exports.Customer = mongoose_1.default.model('Customer', customerSchema);
 exports.CustomerActivity = mongoose_1.default.model('CustomerActivity', customerActivitySchema);
 /**
- * Generates customer code formatted KH000001, KH000002... per owner
+ * Generates customer code formatted KH000001, KH000002...
  */
-async function generateCustomerCode(ownerId) {
-    const filter = { customerCode: /^KH\d+/ };
-    if (ownerId)
-        filter.ownerId = ownerId;
-    const latest = await exports.Customer.findOne(filter)
+async function generateCustomerCode() {
+    const latest = await exports.Customer.findOne({ customerCode: /^KH\d+/ })
         .sort({ customerCode: -1 })
         .exec();
     if (!latest) {

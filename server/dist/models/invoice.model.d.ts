@@ -1,7 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 import { InvoiceStatus, DiscountType, IInvoicePayment, IInvoiceHistory, IInvoiceItem, ICustomer } from '../types';
 export interface IInvoiceDocument extends Document {
-    ownerId?: mongoose.Types.ObjectId;
     invoiceCode: string;
     quoteId?: mongoose.Types.ObjectId;
     quoteCode?: string;
@@ -44,7 +43,7 @@ export declare const Invoice: mongoose.Model<IInvoiceDocument, {}, {}, {}, mongo
     __v: number;
 }, any>;
 /**
- * Generates invoice code formatted: HDYYYYMMDD0001 per owner
+ * Generates invoice code formatted: HDYYYYMMDD0001
  */
-export declare function generateInvoiceCode(ownerId?: any): Promise<string>;
+export declare function generateInvoiceCode(): Promise<string>;
 //# sourceMappingURL=invoice.model.d.ts.map
