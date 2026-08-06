@@ -64,7 +64,7 @@ class SupplierService {
             unitRepo.search({ limit: 500, supplierId: id }),
         ]);
         const purchases = purchasesRes.data;
-        const activePurchases = purchases;
+        const activePurchases = purchases.filter((p) => !p.isDraft && p.status !== 'DRAFT');
         let totalPurchased = 0;
         let totalPaid = 0;
         let totalDebt = 0;

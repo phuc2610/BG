@@ -43,6 +43,13 @@ class InventoryUnitController {
         const unit = await unitService.updateUnitCondition(id, condition);
         res.json({ success: true, data: unit });
     });
+    // PATCH /api/inventory-units/:id/list-price
+    updateListPrice = asyncHandler(async (req, res) => {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const { listPrice } = req.body;
+        const unit = await unitService.updateListPrice(id, listPrice);
+        res.json({ success: true, data: unit });
+    });
 }
 exports.InventoryUnitController = InventoryUnitController;
 //# sourceMappingURL=inventoryUnit.controller.js.map

@@ -9,4 +9,5 @@ export * from './inventoryUnit.model';
 export * from './counter.model';
 export * from './settings.model';
 export * from './user.model';
+export * from './returnExchange.model';
 //# sourceMappingURL=index.d.ts.map

@@ -27,11 +27,24 @@ class QuoteService {
     }
     async create(data) {
         const quoteCode = await (0, models_1.generateQuoteCode)();
-        let customerId;
+        let customerId = data.customerId || data.customer?._id || data.customer?.id;
         if (data.customer && data.customer.name) {
             try {
-                const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy);
-                customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
+                const customerDoc = await customerService.findOrCreateCustomer({
+                    ...data.customer,
+                    _id: customerId,
+                }, data.createdBy);
+                customerId = customerDoc._id ? customerDoc._id.toString() : customerId;
+                data.customer = {
+                    _id: customerDoc._id,
+                    customerCode: customerDoc.customerCode,
+                    name: customerDoc.name,
+                    phone: customerDoc.phone,
+                    email: customerDoc.email,
+                    address: customerDoc.address,
+                    companyName: customerDoc.companyName,
+                    notes: customerDoc.notes,
+                };
             }
             catch (err) {
                 console.error('Error auto-linking customer for quote:', err);
@@ -134,6 +147,7 @@ class QuoteService {
             productSnapshot: {
                 name: productMaster.name,
                 productCode: productMaster.productCode,
+                brand: productMaster.brand || '',
                 condition: condition,
                 costPrice,
                 specs: productMaster.specs || {},

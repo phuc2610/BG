@@ -3,7 +3,7 @@ import { PaymentMethod } from '../types';
 export declare class InvoiceService {
     getAll(query: any): Promise<import("../types").PaginatedResponse<IInvoiceDocument>>;
     getById(id: string): Promise<IInvoiceDocument>;
-    getStats(): Promise<import("../types").InvoiceStats>;
+    getStats(startDate?: string, endDate?: string): Promise<import("../types").InvoiceStats>;
     /**
      * Creates a new DRAFT Invoice by copying data from a confirmed Quote.
      * Does NOT reduce stock or reserve serials yet.
@@ -20,7 +20,8 @@ export declare class InvoiceService {
     updateDraftInvoice(id: string, data: Partial<IInvoiceDocument>): Promise<IInvoiceDocument>;
     /**
      * FINALIZES THE INVOICE (CHỐT HÓA ĐƠN).
-     * Validates serials, customer debt due date, and atomically converts InventoryUnits from RESERVED -> SOLD.
+     * Validates available stock count for items (with or without serials), customer debt due date,
+     * and converts InventoryUnits from AVAILABLE / RESERVED -> SOLD.
      * THIS IS THE ONLY POINT WHERE STOCK IS OFFICIALLY DEDUCTED.
      */
     finalizeInvoice(invoiceId: string, data?: {

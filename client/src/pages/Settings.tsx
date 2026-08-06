@@ -26,6 +26,7 @@ const settingsSchema = z.object({
   signerTitle: z.string().optional(),
   bankInfo: z.string().optional(),
   footerText: z.string().optional(),
+  quoteValidityDays: z.number().min(1).max(365).optional(),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -37,6 +38,9 @@ export function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [terms, setTerms] = useState<string[]>([]);
   const [newTerm, setNewTerm] = useState('');
+  const [quoteValidityDays, setQuoteValidityDays] = useState<number>(7);
+  const [quoteNotes, setQuoteNotes] = useState<string[]>([]);
+  const [newQuoteNote, setNewQuoteNote] = useState('');
 
   const [profileName, setProfileName] = useState(user?.fullName || 'Admin');
   const [oldPassword, setOldPassword] = useState('');
@@ -113,6 +117,12 @@ export function Settings() {
         bankInfo: data.bankInfo,
         footerText: data.footerText,
       });
+      setQuoteValidityDays(data.quoteValidityDays ?? 7);
+      setQuoteNotes(data.quoteNotes || [
+        'Báo giá trên chưa bao gồm phí vận chuyển và lắp đặt.',
+        'Thời gian giao hàng dự kiến: 1 - 2 ngày kể từ khi xác nhận.',
+        'Bảo hành theo chính sách của hãng.',
+      ]);
     } catch {
       toast.error('Không thể tải cài đặt');
     } finally {
@@ -123,7 +133,7 @@ export function Settings() {
   const onSubmit = async (data: SettingsFormData) => {
     setSaving(true);
     try {
-      const res = await api.put('/settings', { ...data, terms, benefits });
+      const res = await api.put('/settings', { ...data, terms, benefits, quoteValidityDays, quoteNotes });
       setSettings(res.data.data);
       toast.success('Đã lưu cài đặt hệ thống');
     } catch {
@@ -177,6 +187,16 @@ export function Settings() {
 
   const removeTerm = (index: number) => {
     setTerms(terms.filter((_, i) => i !== index));
+  };
+
+  const addQuoteNote = () => {
+    if (!newQuoteNote.trim()) return;
+    setQuoteNotes([...quoteNotes, newQuoteNote.trim()]);
+    setNewQuoteNote('');
+  };
+
+  const removeQuoteNote = (index: number) => {
+    setQuoteNotes(quoteNotes.filter((_, i) => i !== index));
   };
 
   if (loading) {
@@ -420,6 +440,25 @@ export function Settings() {
             </div>
 
             <div>
+              <label className={labelClass}>
+                Số Ngày Báo Giá Có Hiệu Lực
+                <span className="ml-1 text-[rgb(var(--muted-foreground))] font-normal text-[11px]">(xuất hiện trên PDF Báo Giá)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={quoteValidityDays}
+                  onChange={(e) => setQuoteValidityDays(Number(e.target.value) || 7)}
+                  className={cn(inputClass, 'w-28')}
+                  placeholder="7"
+                />
+                <span className="text-sm text-[rgb(var(--muted-foreground))]">ngày</span>
+              </div>
+            </div>
+
+            <div>
               <label className={labelClass}>Hotline Liên Hệ</label>
               <input {...register('hotline')} className={inputClass} placeholder="0123.456.789" />
             </div>
@@ -465,21 +504,24 @@ export function Settings() {
           </div>
         </div>
 
-        {/* TERMS & WARRANTY IN PDF */}
+        {/* QUOTE NOTES IN PDF */}
         <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-6 space-y-4">
           <h2 className="text-base font-semibold flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-500" />
-            Điều Khoản & Chính Sách Bảo Hành (Hiển thị trong Báo Giá / Hóa Đơn PDF)
+            <FileText className="w-5 h-5 text-amber-500" />
+            GHI CHÚ Báo Giá (Phần "GHI CHÚ" ở cuối trang PDF Báo Giá)
           </h2>
+          <p className="text-xs text-[rgb(var(--muted-foreground))]">
+            Các dòng bên dưới sẽ xuất hiện trong hộp <strong>GHI CHÚ</strong> của PDF Báo Giá. Dòng cuối <em>"Báo giá có hiệu lực đến hết ngày..."</em> luôn tự động thêm vào và không cần nhập ở đây.
+          </p>
 
           <div className="space-y-2 mb-4">
-            {terms.map((term, index) => (
+            {quoteNotes.map((note, index) => (
               <div key={index} className="flex items-center gap-3 p-3 rounded-xl bg-[rgb(var(--muted))]/50 border border-[rgb(var(--border))]">
-                <span className="text-xs font-bold text-blue-500 w-6 text-center">{index + 1}.</span>
-                <span className="flex-1 text-sm">{term}</span>
+                <span className="text-xs font-bold text-amber-500 w-6 text-center">•</span>
+                <span className="flex-1 text-sm">{note}</span>
                 <button
                   type="button"
-                  onClick={() => removeTerm(index)}
+                  onClick={() => removeQuoteNote(index)}
                   className="p-1 rounded-lg hover:bg-red-500/10 text-[rgb(var(--muted-foreground))] hover:text-red-500 transition-smooth"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -491,16 +533,16 @@ export function Settings() {
           <div className="flex gap-2">
             <input
               type="text"
-              value={newTerm}
-              onChange={(e) => setNewTerm(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTerm(); } }}
+              value={newQuoteNote}
+              onChange={(e) => setNewQuoteNote(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addQuoteNote(); } }}
               className={inputClass}
-              placeholder="Nhập điều khoản mới..."
+              placeholder="Nhập dòng ghi chú mới..."
             />
             <button
               type="button"
-              onClick={addTerm}
-              className="px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-500 text-sm font-medium hover:bg-blue-500/20 transition-smooth flex items-center gap-2 flex-shrink-0"
+              onClick={addQuoteNote}
+              className="px-4 py-2.5 rounded-xl bg-amber-500/10 text-amber-500 text-sm font-medium hover:bg-amber-500/20 transition-smooth flex items-center gap-2 flex-shrink-0"
             >
               <Plus className="w-4 h-4" />
               Thêm

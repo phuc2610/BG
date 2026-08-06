@@ -36,6 +36,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryUnit = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const types_1 = require("../types");
+const unitHistorySchema = new mongoose_1.Schema({
+    action: { type: String, required: true },
+    invoiceId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Invoice' },
+    invoiceCode: String,
+    note: String,
+    date: { type: Date, default: Date.now },
+}, { _id: false });
 const inventoryUnitSchema = new mongoose_1.Schema({
     productId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -55,8 +62,8 @@ const inventoryUnitSchema = new mongoose_1.Schema({
     },
     serialNumber: {
         type: String,
-        required: true,
-        unique: true,
+        required: false,
+        sparse: true, // unique only when a value is present (allows multiple null/undefined)
     },
     purchaseId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -78,6 +85,11 @@ const inventoryUnitSchema = new mongoose_1.Schema({
     purchasePrice: {
         type: Number,
         required: true,
+        min: 0,
+    },
+    listPrice: {
+        type: Number,
+        default: 0,
         min: 0,
     },
     condition: {
@@ -118,6 +130,7 @@ const inventoryUnitSchema = new mongoose_1.Schema({
     },
     soldInvoiceCode: String,
     soldAt: Date,
+    history: [unitHistorySchema],
 }, {
     timestamps: true,
     toJSON: { virtuals: true },

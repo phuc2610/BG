@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 export declare class AdminController {
     getUsers: (req: Request, res: Response, next: import("express").NextFunction) => void;
+    updateUser: (req: Request, res: Response, next: import("express").NextFunction) => void;
     getUserPermissions: (req: Request, res: Response, next: import("express").NextFunction) => void;
     updateUserPermissions: (req: Request, res: Response, next: import("express").NextFunction) => void;
     activateUser: (req: Request, res: Response, next: import("express").NextFunction) => void;

@@ -31,7 +31,11 @@ class QuoteController {
     });
     // POST /api/quotes
     create = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const quote = await quoteService.create(req.body);
+        const creatorName = req.user?.fullName || req.user?.username || req.body.createdBy;
+        const quote = await quoteService.create({
+            ...req.body,
+            createdBy: creatorName,
+        });
         res.status(201).json({ success: true, data: quote });
     });
     // PUT /api/quotes/:id

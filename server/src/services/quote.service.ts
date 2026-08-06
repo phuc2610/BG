@@ -38,11 +38,24 @@ export class QuoteService {
   }) {
     const quoteCode = await generateQuoteCode();
 
-    let customerId: string | undefined;
+    let customerId: string | undefined = (data as any).customerId || (data.customer as any)?._id || (data.customer as any)?.id;
     if (data.customer && data.customer.name) {
       try {
-        const customerDoc = await customerService.findOrCreateCustomer(data.customer, data.createdBy);
-        customerId = customerDoc._id ? customerDoc._id.toString() : undefined;
+        const customerDoc = await customerService.findOrCreateCustomer({
+          ...data.customer,
+          _id: customerId as any,
+        }, data.createdBy);
+        customerId = customerDoc._id ? customerDoc._id.toString() : customerId;
+        data.customer = {
+          _id: customerDoc._id,
+          customerCode: customerDoc.customerCode,
+          name: customerDoc.name,
+          phone: customerDoc.phone,
+          email: customerDoc.email,
+          address: customerDoc.address,
+          companyName: customerDoc.companyName,
+          notes: customerDoc.notes,
+        } as any;
       } catch (err) {
         console.error('Error auto-linking customer for quote:', err);
       }
@@ -162,6 +175,7 @@ export class QuoteService {
       productSnapshot: {
         name: productMaster.name,
         productCode: productMaster.productCode,
+        brand: productMaster.brand || '',
         condition: condition as any,
         costPrice,
         specs: productMaster.specs || {},

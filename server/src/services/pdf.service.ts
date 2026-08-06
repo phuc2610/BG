@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer';
-import { IQuoteDocument, IInvoiceDocument } from '../models';
+import mongoose from 'mongoose';
+import { IQuoteDocument, IInvoiceDocument, User } from '../models';
 import { getSettings } from '../models';
 import { QuoteStatus } from '../types';
 import { numberToWordsVietnamese } from '../utils/numberToWords';
@@ -7,7 +8,9 @@ import { numberToWordsVietnamese } from '../utils/numberToWords';
 export class PdfService {
   async generateQuotePdf(quote: IQuoteDocument): Promise<Buffer> {
     const settings = await getSettings();
-    const html = this.buildHtml(quote, settings);
+    const creatorDisplayName = await this.getCreatorDisplayName(quote.createdBy, (quote as any).createdByName);
+
+    const html = this.buildHtml(quote, settings, creatorDisplayName);
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -30,7 +33,9 @@ export class PdfService {
 
   async generateInvoicePdf(invoice: IInvoiceDocument): Promise<Buffer> {
     const settings = await getSettings();
-    const html = this.buildInvoiceHtml(invoice, settings);
+    const creatorDisplayName = await this.getCreatorDisplayName(invoice.createdBy, (invoice as any).createdByName);
+
+    const html = this.buildInvoiceHtml(invoice, settings, creatorDisplayName);
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -218,27 +223,87 @@ export class PdfService {
       .page-container {
         width: 210mm;
         min-height: 297mm;
+        height: auto;
+        overflow: visible;
         padding: 10mm 10mm 12mm 10mm;
         margin: 0 auto;
         background: #ffffff;
         position: relative;
+        box-sizing: border-box;
+      }
+
+      /* ===== PAGE BREAK & BLOCK INTEGRITY CONTROL ===== */
+      .doc-header,
+      .customer-card,
+      .bottom-grid,
+      .payment-section,
+      .vietqr-box,
+      .payment-card,
+      .summary-box,
+      .notes-card,
+      .policy-strip,
+      .doc-footer,
+      .doc-footer-wrap {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      /* Each product row must not split across pages */
+      .doc-table tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      
+      /* ===== RESPONSIVE SECTION SPACING ===== */
+      .section-spacer {
+        width: 100%;
+      }
+
+      /* 1–3 Products: Distribute white space between sections naturally */
+      body.products-few .page-container {
+        min-height: 297mm;
+        height: auto;
+        overflow: visible;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        box-sizing: border-box;
       }
-      .doc-body-wrap {
+      body.products-few .doc-body-wrap {
         flex: 1 0 auto;
         display: flex;
         flex-direction: column;
       }
-      .doc-footer-wrap {
+      body.products-few .doc-footer-wrap {
         margin-top: auto;
         flex-shrink: 0;
-        width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+      }
+      body.products-few .section-spacer.flex-sm { flex: 0.5 0 8px; min-height: 8px; }
+      body.products-few .section-spacer.flex-md { flex: 1 0 10px; min-height: 10px; }
+      body.products-few .section-spacer.flex-lg { flex: 1.5 0 14px; min-height: 14px; }
+
+      /* 4+ Products: Normal block flow, no flex-grow, allow auto multi-page overflow */
+      body.products-normal .page-container,
+      body.products-normal .doc-body-wrap {
+        display: block !important;
+        height: auto !important;
+        min-height: 297mm;
+        overflow: visible !important;
+      }
+      body.products-normal .section-spacer {
+        display: block;
+        height: 10px;
+        flex: none !important;
+      }
+      body.products-normal .doc-footer-wrap {
+        margin-top: 14px;
+        flex-shrink: 0;
+        display: block;
+      }
+      body.products-normal .doc-footer-wrap .section-spacer {
+        height: 8px;
+        flex: none !important;
       }
 
       /* ===== SHARED HEADER (66% / 34%) - 38mm FULL BLEED ===== */
@@ -584,19 +649,27 @@ export class PdfService {
       }
       .prod-code {
         font-family: 'Be Vietnam Pro', Arial, sans-serif;
-        font-size: 9.5px;
+        font-size: 9px;
         font-weight: 600;
-        line-height: 1.2;
+        line-height: 1.25;
         color: #0B4FD4;
         margin-top: 2px;
-        white-space: nowrap;
-        word-break: normal;
-        overflow-wrap: normal;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .td-info {
+        padding: 6px 8px;
+        vertical-align: top;
+        word-break: break-word;
+        overflow-wrap: anywhere;
       }
       .info-line {
-        font-size: 10.5px;
-        line-height: 15px;
+        font-size: 10px;
+        line-height: 1.4;
         color: #1E293B;
+        word-break: break-word;
+        overflow-wrap: anywhere;
       }
       .info-line span {
         font-weight: 400;
@@ -605,22 +678,25 @@ export class PdfService {
 
       /* ===== PAYMENT & SUMMARY AREA ===== */
       .bottom-grid {
-        display: flex;
-        gap: 11px;
+        display: grid;
+        grid-template-columns: 43% 57%;
+        gap: 10px;
         align-items: stretch;
+        width: 100%;
         margin-top: 10px;
         margin-bottom: 8px;
+        box-sizing: border-box;
       }
       .vietqr-box {
-        width: 44%;
+        width: 100%;
+        height: 100%;
         background: #F8FAFD;
         border: 1px solid #D9E4F2;
         border-radius: 10px;
-        padding: 14px 16px;
+        padding: 12px 14px;
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
-        gap: 10px;
         box-sizing: border-box;
       }
       .qr-title {
@@ -654,8 +730,8 @@ export class PdfService {
         display: inline-block;
       }
       .qr-img {
-        width: 120px;
-        height: 120px;
+        width: 115px;
+        height: 115px;
         aspect-ratio: 1/1;
         object-fit: contain;
         display: block;
@@ -689,18 +765,22 @@ export class PdfService {
       }
 
       .right-col {
-        width: 56%;
+        width: 100%;
+        height: 100%;
         display: flex;
         flex-direction: column;
         gap: 8px;
+        justify-content: space-between;
+        box-sizing: border-box;
       }
 
       .summary-box {
-        width: 56%;
+        width: 100%;
+        height: 100%;
         background: #F8FAFD;
         border: 1px solid #D9E4F2;
         border-radius: 10px;
-        padding: 14px 16px;
+        padding: 12px 14px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -1108,7 +1188,7 @@ export class PdfService {
   /**
    * BUILD BÁO GIÁ HTML
    */
-  private buildHtml(quote: IQuoteDocument, settings: any): string {
+  private buildHtml(quote: IQuoteDocument, settings: any, creatorName?: string): string {
     const payment = this.generateQuoteVietQR(quote, settings);
     const amountInWords = numberToWordsVietnamese(quote.grandTotal);
 
@@ -1173,9 +1253,10 @@ export class PdfService {
       })
       .join('');
 
+    const validDays = (settings as any).quoteValidityDays ?? 7;
     const validUntilDate = (quote as any).validUntil
       ? (quote as any).validUntil
-      : new Date(new Date(quote.createdDate).getTime() + 7 * 86400000);
+      : new Date(new Date(quote.createdDate).getTime() + validDays * 86400000);
 
     const contactPersonName = (quote as any).contactPerson || quote.customer?.contactPerson || quote.customer?.name;
 
@@ -1222,7 +1303,7 @@ export class PdfService {
           </div>
           <div class="customer-col-2">
             <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg><span class="info-label">Địa chỉ:</span><span class="info-val">${quote.customer.address || '---'}</span></div>
-            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Người lập:</span><span class="info-val">${(quote as any).createdByName || (quote as any).createdBy || 'Admin'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Nhân viên bán hàng:</span><span class="info-val">${creatorName || (quote as any).createdByName || (quote as any).createdBy || 'Nhân viên'}</span></div>
             <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg><span class="info-label">Ghi chú:</span><span class="info-val">${quote.notes || '---'}</span></div>
           </div>
           <div class="customer-col-status">
@@ -1309,9 +1390,14 @@ export class PdfService {
           <div class="notes-card">
             <div class="notes-title">GHI CHÚ</div>
             <ul class="notes-list">
-              <li>• Báo giá trên chưa bao gồm phí vận chuyển và lắp đặt.</li>
-              <li>• Thời gian giao hàng dự kiến: 1 - 2 ngày kể từ khi xác nhận.</li>
-              <li>• Bảo hành theo chính sách của hãng.</li>
+              ${((settings as any).quoteNotes && (settings as any).quoteNotes.length > 0
+                ? (settings as any).quoteNotes
+                : [
+                    'Báo giá trên chưa bao gồm phí vận chuyển và lắp đặt.',
+                    'Thời gian giao hàng dự kiến: 1 - 2 ngày kể từ khi xác nhận.',
+                    'Bảo hành theo chính sách của hãng.',
+                  ]
+              ).map((note: string) => `<li>• ${note}</li>`).join('\n              ')}
               <li>• Báo giá có hiệu lực đến hết ngày ${this.formatDate(validUntilDate)}.</li>
             </ul>
           </div>
@@ -1335,7 +1421,7 @@ export class PdfService {
   /**
    * BUILD HÓA ĐƠN BÁN HÀNG HTML
    */
-  private buildInvoiceHtml(invoice: IInvoiceDocument, settings: any): string {
+  private buildInvoiceHtml(invoice: IInvoiceDocument, settings: any, creatorName?: string): string {
     const payment = this.generateInvoiceVietQR(invoice, settings);
     const amountInWords = numberToWordsVietnamese(invoice.grandTotal);
 
@@ -1452,7 +1538,7 @@ export class PdfService {
           </div>
           <div class="customer-col-2">
             <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg><span class="info-label">Địa chỉ:</span><span class="info-val">${invoice.customer.address || '---'}</span></div>
-            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Người lập:</span><span class="info-val">${(invoice as any).createdByName || invoice.createdBy || 'Admin'}</span></div>
+            <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span class="info-label">Nhân viên bán hàng:</span><span class="info-val">${creatorName || (invoice as any).createdByName || invoice.createdBy || 'Nhân viên'}</span></div>
             <div class="info-item"><svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg><span class="info-label">Ghi chú:</span><span class="info-val">${invoice.notes || '---'}</span></div>
           </div>
           <div class="customer-col-status">
@@ -1568,5 +1654,35 @@ export class PdfService {
     </div>
   </body>
   </html>`;
+  }
+
+  private async getCreatorDisplayName(rawCreator?: string, createdByName?: string): Promise<string> {
+    if (createdByName && createdByName !== 'System Admin' && createdByName !== 'Admin') {
+      return createdByName;
+    }
+    if (!rawCreator) return 'Nhân viên';
+
+    try {
+      const isObjId = mongoose.isValidObjectId(rawCreator);
+      const creator = await User.findOne({
+        $or: [
+          { username: rawCreator },
+          { usernameNormalized: String(rawCreator).toLowerCase() },
+          ...(isObjId ? [{ _id: rawCreator }] : []),
+        ],
+      }).select('fullName username').exec();
+
+      if (creator && creator.fullName) {
+        return creator.fullName;
+      }
+    } catch (e) {
+      console.error('Lookup creator user error:', e);
+    }
+
+    if (rawCreator !== 'System Admin' && rawCreator !== 'Admin' && !mongoose.isValidObjectId(rawCreator)) {
+      return rawCreator;
+    }
+
+    return 'Nhân viên';
   }
 }

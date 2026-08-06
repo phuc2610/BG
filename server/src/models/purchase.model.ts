@@ -18,6 +18,7 @@ export interface IPurchaseItemDocument {
   productName: string;
   quantity: number;
   costPrice: number;
+  listPrice?: number;
   condition: ProductCondition;
   supplierWarrantyMonths: number;
   serials: string[];
@@ -39,7 +40,8 @@ export interface IPurchaseDocument extends Document {
   paidAmount: number;
   remainingAmount: number;
   dueDate?: Date;
-  status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
+  isDraft?: boolean;
+  status: 'DRAFT' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
   payments: ISupplierPaymentDocument[];
   createdAt: Date;
   updatedAt: Date;
@@ -69,6 +71,7 @@ const purchaseItemSchema = new Schema<IPurchaseItemDocument>(
     productName: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     costPrice: { type: Number, required: true, min: 0 },
+    listPrice: { type: Number, default: 0, min: 0 },
     condition: { type: String, enum: Object.values(ProductCondition), default: ProductCondition.LIKE_NEW },
     supplierWarrantyMonths: { type: Number, default: 12 },
     serials: { type: [String], default: [] },
@@ -106,9 +109,10 @@ const purchaseSchema = new Schema<IPurchaseDocument>(
     paidAmount: { type: Number, default: 0, min: 0 },
     remainingAmount: { type: Number, default: 0, min: 0 },
     dueDate: Date,
+    isDraft: { type: Boolean, default: false, index: true },
     status: {
       type: String,
-      enum: ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'DUE_SOON', 'OVERDUE'],
+      enum: ['DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'DUE_SOON', 'OVERDUE'],
       default: 'UNPAID',
       index: true,
     },

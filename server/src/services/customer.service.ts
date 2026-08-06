@@ -30,17 +30,42 @@ export class CustomerService {
       throw new AppError('Tên khách hàng là bắt buộc', 400);
     }
 
+    // 1. Check by ID if provided
+    const targetId = (data as any)._id || (data as any).id;
+    if (targetId) {
+      const existingById = await customerRepo.findById(targetId.toString());
+      if (existingById) {
+        if (!existingById.address && data.address) existingById.address = data.address.trim();
+        if (!existingById.email && data.email) existingById.email = data.email.trim();
+        if (!existingById.companyName && data.companyName) existingById.companyName = data.companyName.trim();
+        await existingById.save();
+        return existingById;
+      }
+    }
+
+    // 2. Check by Phone
     const phone = data.phone?.trim();
     if (phone) {
       const existing = await customerRepo.findByPhone(phone);
       if (existing) {
-        // Update existing customer info if missing
-        if (!existing.address && data.address) existing.address = data.address;
-        if (!existing.email && data.email) existing.email = data.email;
-        if (!existing.companyName && data.companyName) existing.companyName = data.companyName;
+        if (!existing.address && data.address) existing.address = data.address.trim();
+        if (!existing.email && data.email) existing.email = data.email.trim();
+        if (!existing.companyName && data.companyName) existing.companyName = data.companyName.trim();
         await existing.save();
         return existing;
       }
+    }
+
+    // 3. Check by exact Name match (case insensitive)
+    const existingByName = await customerRepo.findOne({
+      name: { $regex: new RegExp(`^${data.name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    if (existingByName) {
+      if (!existingByName.address && data.address) existingByName.address = data.address.trim();
+      if (!existingByName.email && data.email) existingByName.email = data.email.trim();
+      if (phone && !existingByName.phone) existingByName.phone = phone;
+      await existingByName.save();
+      return existingByName;
     }
 
     const customerCode = await generateCustomerCode();

@@ -59,6 +59,11 @@ const inventorySchema = new mongoose_1.Schema({
         required: true,
         min: 0,
     },
+    listPrice: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     quantity: {
         type: Number,
         required: true,

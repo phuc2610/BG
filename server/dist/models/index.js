@@ -25,4 +25,5 @@ __exportStar(require("./inventoryUnit.model"), exports);
 __exportStar(require("./counter.model"), exports);
 __exportStar(require("./settings.model"), exports);
 __exportStar(require("./user.model"), exports);
+__exportStar(require("./returnExchange.model"), exports);
 //# sourceMappingURL=index.js.map

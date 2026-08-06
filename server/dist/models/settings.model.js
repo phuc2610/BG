@@ -112,6 +112,18 @@ const settingsSchema = new mongoose_1.Schema({
         type: String,
         default: 'Cảm ơn quý khách đã tin tưởng và lựa chọn NP Computer! 🙏',
     },
+    quoteValidityDays: {
+        type: Number,
+        default: 7,
+    },
+    quoteNotes: {
+        type: [String],
+        default: [
+            'Báo giá trên chưa bao gồm phí vận chuyển và lắp đặt.',
+            'Thời gian giao hàng dự kiến: 1 - 2 ngày kể từ khi xác nhận.',
+            'Bảo hành theo chính sách của hãng.',
+        ],
+    },
 }, {
     timestamps: true,
 });

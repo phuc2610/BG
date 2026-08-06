@@ -53,21 +53,22 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page Title */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Dashboard Quản Lý Cửa Hàng</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
             Tổng quan danh mục sản phẩm, kho linh kiện & hệ thống kho chung
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
           {hasPermission('product.create') && (
             <button
               onClick={() => navigate('/products/new')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgb(var(--border))] text-sm font-medium hover:bg-[rgb(var(--accent))] transition-smooth"
             >
               <Plus className="w-4 h-4 text-blue-500" />
-              Tạo Mã SP Mới
+              <span className="hidden sm:inline">Tạo Mã SP Mới</span>
+              <span className="sm:hidden">Tạo SP</span>
             </button>
           )}
           {hasPermission('purchase.create') && (
@@ -76,7 +77,7 @@ export function Dashboard() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth shadow-lg shadow-blue-500/25"
             >
               <Warehouse className="w-4 h-4" />
-              Nhập Hàng
+              <span className="hidden sm:inline">Nhập Hàng</span>
             </button>
           )}
         </div>

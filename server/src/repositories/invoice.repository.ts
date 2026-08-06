@@ -26,8 +26,16 @@ export class InvoiceRepository extends BaseRepository<IInvoiceDocument> {
 
     if (startDate || endDate) {
       filter.createdDate = {};
-      if (startDate) filter.createdDate.$gte = new Date(startDate);
-      if (endDate) filter.createdDate.$lte = new Date(endDate);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        filter.createdDate.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.createdDate.$lte = end;
+      }
     }
 
     if (search && search.trim()) {
@@ -68,8 +76,24 @@ export class InvoiceRepository extends BaseRepository<IInvoiceDocument> {
     };
   }
 
-  async getStats(): Promise<InvoiceStats> {
-    const activeInvoices = await this.model.find({ status: { $ne: InvoiceStatus.CANCELLED } }).exec();
+  async getStats(startDate?: string, endDate?: string): Promise<InvoiceStats> {
+    const filter: FilterQuery<IInvoiceDocument> = { status: { $ne: InvoiceStatus.CANCELLED } };
+
+    if (startDate || endDate) {
+      filter.createdDate = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        filter.createdDate.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.createdDate.$lte = end;
+      }
+    }
+
+    const activeInvoices = await this.model.find(filter).exec();
 
     const totalInvoices = activeInvoices.length;
     let totalRevenue = 0;

@@ -366,14 +366,40 @@ export function QuoteForm() {
                 {customerSuggestions.map((c) => (
                   <div
                     key={c._id}
-                    onClick={() => {
+                    onClick={async () => {
                       setValue('name', c.name);
                       if (c.phone) setValue('phone', c.phone);
                       if (c.email) setValue('email', c.email);
                       if (c.address) setValue('address', c.address);
                       if (c.notes) setValue('notes', c.notes);
                       setShowCustomerDropdown(false);
-                      toast.success(`Đã chọn khách hàng: ${c.name}`);
+
+                      if (!isEdit) {
+                        try {
+                          setSaving(true);
+                          const res = await api.post('/quotes', {
+                            customerId: c._id,
+                            customer: {
+                              _id: c._id,
+                              customerCode: c.customerCode,
+                              name: c.name,
+                              phone: c.phone,
+                              email: c.email,
+                              address: c.address,
+                              companyName: c.companyName,
+                              notes: c.notes,
+                            },
+                          });
+                          toast.success(`Đã chọn KH cũ: ${c.name} — Chuyển thẳng đến chọn linh kiện!`);
+                          navigate(`/quotes/${res.data.data._id}`);
+                        } catch (err: any) {
+                          toast.error(err.response?.data?.message || 'Không thể tạo báo giá');
+                        } finally {
+                          setSaving(false);
+                        }
+                      } else {
+                        toast.success(`Đã gán khách hàng: ${c.name}`);
+                      }
                     }}
                     className="p-3 hover:bg-[rgb(var(--accent))] cursor-pointer transition-colors"
                   >
@@ -407,24 +433,7 @@ export function QuoteForm() {
             <textarea {...register('notes')} className={cn(inputClass, 'h-20 resize-none')} placeholder="Ghi chú thêm..." />
           </div>
 
-          <div className="md:col-span-2 pt-2">
-            <label className="flex items-center gap-3 text-sm text-[rgb(var(--foreground))] cursor-pointer p-3 rounded-xl bg-[rgb(var(--muted))]/50 border border-[rgb(var(--border))] hover:border-blue-500/30 transition-smooth">
-              <input
-                type="checkbox"
-                checked={showConditionInPdf}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setShowConditionInPdf(checked);
-                  updateFinancials(checked);
-                }}
-                className="w-4 h-4 rounded border-[rgb(var(--border))] text-blue-500 focus:ring-blue-500/30"
-              />
-              <div>
-                <span className="font-semibold block text-sm">Hiển thị Tình trạng sản phẩm (New, 99%, Like New...) khi tải/in PDF</span>
-                <span className="text-xs text-[rgb(var(--muted-foreground))]">Tích vào nếu muốn file PDF báo giá in thêm nhãn tình trạng linh kiện. Nếu không tích file PDF sẽ ẩn tình trạng.</span>
-              </div>
-            </label>
-          </div>
+
         </div>
       </div>
 
@@ -476,17 +485,9 @@ export function QuoteForm() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold truncate">{item.productSnapshot.name}</p>
-                        <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold', conditionColors[item.productSnapshot.condition] || '')}>
-                          {item.productSnapshot.condition}
-                        </span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-xs text-blue-500 font-mono">{item.productSnapshot.productCode}</p>
-                        {(item.serialNumber || item.productSnapshot.serialNumber) && (
-                          <span className="text-[11px] font-semibold font-mono text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                            S/N: {item.serialNumber || item.productSnapshot.serialNumber}
-                          </span>
-                        )}
                       </div>
                       <p className="text-xs text-[rgb(var(--muted-foreground))] mt-0.5 line-clamp-1">
                         {buildSpecsString(item.productSnapshot.specs as any)}
@@ -502,15 +503,26 @@ export function QuoteForm() {
                     <div className="flex items-center gap-3 flex-wrap md:flex-nowrap flex-shrink-0">
                       <div className="text-right">
                         <label className="text-[10px] text-[rgb(var(--muted-foreground))] block">Bảo hành</label>
-                        <select
-                          value={item.warranty || '12 tháng'}
-                          onChange={(e) => updateItem(item._id, { warranty: e.target.value })}
-                          className="px-2 py-1 rounded-lg text-xs bg-[rgb(var(--muted))] border border-[rgb(var(--border))] focus:outline-none"
-                        >
-                          {WARRANTY_OPTIONS.map((w) => (
-                            <option key={w} value={w}>{w}</option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={item.warranty || '12 tháng'}
+                            onChange={(e) => updateItem(item._id, { warranty: e.target.value })}
+                            className="w-24 px-2 py-1 rounded-lg text-xs bg-[rgb(var(--muted))] border border-[rgb(var(--border))] focus:outline-none font-medium"
+                            placeholder="VD: 12 tháng..."
+                          />
+                          <input
+                            type="date"
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                const dStr = new Date(e.target.value).toLocaleDateString('vi-VN');
+                                updateItem(item._id, { warranty: `Đến ${dStr}` });
+                              }
+                            }}
+                            title="Chọn ngày hết hạn bảo hành trên Lịch"
+                            className="w-7 h-7 p-1 rounded-lg text-xs bg-[rgb(var(--muted))] border border-[rgb(var(--border))] cursor-pointer"
+                          />
+                        </div>
                       </div>
 
                       <div className="text-right">
@@ -745,7 +757,7 @@ function InventorySearchModal({
 
   const handlePickLot = (lot: any) => {
     setActiveLot(lot);
-    setSellingPrice(lot.suggestedSellingPrice || lot.costPrice || 0);
+    setSellingPrice(lot.listPrice || lot.suggestedSellingPrice || lot.sellingPrice || lot.costPrice || 0);
     setWarranty('12 tháng');
     setSelectedSerial('');
   };
@@ -796,9 +808,6 @@ function InventorySearchModal({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold truncate">{activeLot.product?.name}</p>
-                  <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold', conditionColors[activeLot.condition] || '')}>
-                    {activeLot.condition}
-                  </span>
                 </div>
                 <p className="text-xs text-[rgb(var(--muted-foreground))]">
                   Mã: {activeLot.product?.productCode} • Giá vốn: <strong className="text-[rgb(var(--foreground))]">{formatCurrency(activeLot.costPrice)}</strong>
@@ -940,9 +949,6 @@ function InventorySearchModal({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium truncate">{lot.product?.name}</p>
-                      <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold', conditionColors[lot.condition] || '')}>
-                        {lot.condition}
-                      </span>
                     </div>
                     <p className="text-xs text-[rgb(var(--muted-foreground))] mt-0.5">
                       Mã: {lot.product?.productCode} • Mã kho: {lot.stockCode}
@@ -957,8 +963,13 @@ function InventorySearchModal({
 
                   <div className="text-right flex-shrink-0">
                     <p className="text-xs text-[rgb(var(--muted-foreground))]">
-                      Vốn: <strong className="text-[rgb(var(--foreground))]">{formatCurrency(lot.costPrice)}</strong>
+                      Niêm yết: <strong className="text-blue-500 font-bold">{formatCurrency(lot.listPrice || lot.suggestedSellingPrice || lot.sellingPrice || lot.costPrice)}</strong>
                     </p>
+                    {lot.costPrice > 0 && (
+                      <p className="text-[11px] text-[rgb(var(--muted-foreground))]">
+                        Vốn: <span>{formatCurrency(lot.costPrice)}</span>
+                      </p>
+                    )}
                     <p className="text-xs font-bold text-emerald-500 mt-0.5">
                       Tồn: {lot.quantity}
                     </p>

@@ -165,6 +165,7 @@ export interface IDebt {
 export interface IQuoteItemSnapshot {
     name: string;
     productCode: string;
+    brand?: string;
     condition: ProductCondition;
     costPrice: number;
     specs: IProductSpecs;
@@ -188,7 +189,11 @@ export declare enum InvoiceStatus {
     PARTIALLY_PAID = "Thanh to\u00E1n m\u1ED9t ph\u1EA7n",
     PAID = "\u0110\u00E3 thanh to\u00E1n",
     CANCELLED = "\u0110\u00E3 h\u1EE7y",
-    REFUNDED = "Ho\u00E0n ti\u1EC1n"
+    REFUNDED = "Ho\u00E0n ti\u1EC1n",
+    PARTIALLY_RETURNED = "Tr\u1EA3 h\u00E0ng m\u1ED9t ph\u1EA7n",
+    FULLY_RETURNED = "\u0110\u00E3 tr\u1EA3 to\u00E0n b\u1ED9",
+    PARTIALLY_EXCHANGED = "\u0110\u1ED5i h\u00E0ng m\u1ED9t ph\u1EA7n",
+    EXCHANGED = "\u0110\u00E3 \u0111\u1ED5i h\u00E0ng"
 }
 export declare enum PaymentMethod {
     CASH = "Ti\u1EC1n m\u1EB7t",
@@ -222,7 +227,80 @@ export declare enum InventoryUnitStatus {
     SOLD = "SOLD",
     WARRANTY = "WARRANTY",
     RETURNED = "RETURNED",
+    RETURN_INSPECTION = "RETURN_INSPECTION",
     DAMAGED = "DAMAGED"
+}
+export declare enum ReturnItemCondition {
+    GOOD_RESTOCK = "T\u1ED1t / nh\u1EADp l\u1EA1i kho",
+    INSPECTION = "Ch\u1EDD ki\u1EC3m tra",
+    WARRANTY = "L\u1ED7i / b\u1EA3o h\u00E0nh",
+    DAMAGED = "H\u1ECFng / kh\u00F4ng nh\u1EADp kho"
+}
+export declare enum ReturnExchangeType {
+    RETURN = "RETURN",
+    EXCHANGE = "EXCHANGE"
+}
+export interface IReturnItem {
+    order: number;
+    productId?: string;
+    productCode: string;
+    productName: string;
+    serialNumber?: string;
+    originalSalePrice: number;
+    originalCostPrice: number;
+    refundAmount: number;
+    debtReduction: number;
+    retainedAmount: number;
+    condition: ReturnItemCondition;
+    inventoryStatusTarget: InventoryUnitStatus;
+    status: 'RETURNED';
+}
+export interface IExchangeItem {
+    order: number;
+    oldProductId?: string;
+    oldProductCode: string;
+    oldProductName: string;
+    oldSerialNumber?: string;
+    oldSalePrice: number;
+    oldCostPrice: number;
+    oldCondition: ReturnItemCondition;
+    oldInventoryStatusTarget: InventoryUnitStatus;
+    newProductId: string;
+    newProductCode: string;
+    newProductName: string;
+    newSerialNumber?: string;
+    newSalePrice: number;
+    newCostPrice: number;
+    priceDifference: number;
+    customerPaidExtra: number;
+    customerDebtAdded: number;
+    cashRefund: number;
+    debtReduction: number;
+    retainedAmount: number;
+    status: 'EXCHANGED';
+}
+export interface IReturnExchangeTransaction {
+    _id?: string;
+    transactionCode: string;
+    invoiceId: string;
+    invoiceCode: string;
+    customerId?: string;
+    customerName: string;
+    type: ReturnExchangeType;
+    returnedItems: IReturnItem[];
+    exchangedItems: IExchangeItem[];
+    totalOriginalValue: number;
+    totalRefundAmount: number;
+    totalDebtReduction: number;
+    totalRetainedAmount: number;
+    totalCustomerPaidExtra: number;
+    totalCustomerDebtAdded: number;
+    profitAdjustment: number;
+    reason?: string;
+    notes?: string;
+    createdBy?: string;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 export interface ISupplier {
     _id?: string;
@@ -327,6 +405,20 @@ export interface IInvoiceItem {
     selectedSerials?: string[];
     total: number;
     order: number;
+    itemStatus?: 'SOLD' | 'RETURNED' | 'EXCHANGED';
+    returnExchangeTxId?: string;
+    returnedAt?: Date;
+    refundAmount?: number;
+    retainedAmount?: number;
+    debtReduction?: number;
+    exchangedToItem?: {
+        productId: string;
+        productCode: string;
+        productName: string;
+        serialNumber?: string;
+        unitPrice: number;
+        costPrice: number;
+    };
 }
 export interface IQuote {
     _id?: string;
@@ -423,6 +515,8 @@ export interface ISettings {
     terms: string[];
     benefits?: IBenefitItem[];
     footerText: string;
+    quoteValidityDays?: number;
+    quoteNotes?: string[];
 }
 export interface PaginationQuery {
     page?: number;

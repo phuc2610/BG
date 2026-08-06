@@ -5,13 +5,14 @@ export interface IInventoryUnitDocument extends Document {
   productId: mongoose.Types.ObjectId;
   productCode: string;
   productName: string;
-  serialNumber: string;
+  serialNumber?: string;
   purchaseId?: mongoose.Types.ObjectId;
   purchaseCode?: string;
   supplierId?: mongoose.Types.ObjectId;
   supplierName?: string;
   purchaseDate: Date;
   purchasePrice: number;
+  listPrice?: number;
   condition: ProductCondition;
   supplierWarrantyMonths: number;
   supplierWarrantyStartDate: Date;
@@ -22,9 +23,28 @@ export interface IInventoryUnitDocument extends Document {
   soldInvoiceId?: mongoose.Types.ObjectId;
   soldInvoiceCode?: string;
   soldAt?: Date;
+  history?: Array<{
+
+    action: string;
+    invoiceId?: mongoose.Types.ObjectId;
+    invoiceCode?: string;
+    note?: string;
+    date: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const unitHistorySchema = new Schema(
+  {
+    action: { type: String, required: true },
+    invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
+    invoiceCode: String,
+    note: String,
+    date: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
   {
@@ -46,8 +66,8 @@ const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
     },
     serialNumber: {
       type: String,
-      required: true,
-      unique: true,
+      required: false,
+      sparse: true, // unique only when a value is present (allows multiple null/undefined)
     },
     purchaseId: {
       type: Schema.Types.ObjectId,
@@ -69,6 +89,11 @@ const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
     purchasePrice: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    listPrice: {
+      type: Number,
+      default: 0,
       min: 0,
     },
     condition: {
@@ -109,7 +134,9 @@ const inventoryUnitSchema = new Schema<IInventoryUnitDocument>(
     },
     soldInvoiceCode: String,
     soldAt: Date,
+    history: [unitHistorySchema],
   },
+
   {
     timestamps: true,
     toJSON: { virtuals: true },

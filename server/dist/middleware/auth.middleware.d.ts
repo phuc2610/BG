@@ -4,6 +4,7 @@ export interface AuthRequest extends Request {
     user?: {
         id: string;
         username: string;
+        fullName: string;
         role: UserRole;
         permissions: string[];
         maxQuoteDiscountPercent: number;

@@ -93,6 +93,7 @@ const productSchema = new mongoose_1.Schema({
         required: true,
     },
     description: String,
+    sellingPrice: { type: Number, default: 0, min: 0 },
     specs: {
         type: productSpecsSchema,
         default: () => ({}),

@@ -17,5 +17,9 @@ router.post('/:id/payments', requirePermission('payment.create'), (req, res, nex
 router.put('/:id/draft', requirePermission('invoice.edit'), (req, res, next) => controller.updateDraft(req, res, next));
 router.put('/:id', requirePermission('invoice.edit'), (req, res, next) => controller.update(req, res, next));
 router.post('/:id/cancel', requirePermission('invoice.cancel'), (req, res, next) => controller.cancel(req, res, next));
+router.post('/:id/return', requirePermission('invoice.edit'), (req, res, next) => controller.processReturn(req, res, next));
+router.post('/:id/exchange', requirePermission('invoice.edit'), (req, res, next) => controller.processExchange(req, res, next));
+router.get('/:id/return-exchange-history', requirePermission('invoice.view'), (req, res, next) => controller.getReturnExchangeHistory(req, res, next));
 
 export default router;
+

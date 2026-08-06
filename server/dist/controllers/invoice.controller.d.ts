@@ -10,5 +10,8 @@ export declare class InvoiceController {
     finalize: (req: Request, res: Response, next: NextFunction) => void;
     update: (req: Request, res: Response, next: NextFunction) => void;
     cancel: (req: Request, res: Response, next: NextFunction) => void;
+    processReturn: (req: Request, res: Response, next: NextFunction) => void;
+    processExchange: (req: Request, res: Response, next: NextFunction) => void;
+    getReturnExchangeHistory: (req: Request, res: Response, next: NextFunction) => void;
 }
 //# sourceMappingURL=invoice.controller.d.ts.map

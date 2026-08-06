@@ -81,6 +81,17 @@ const invoiceItemSchema = new mongoose_1.Schema({
     selectedSerials: { type: [String], default: [] },
     total: { type: Number, required: true, min: 0 },
     order: { type: Number, default: 0 },
+    itemStatus: {
+        type: String,
+        enum: ['SOLD', 'RETURNED', 'EXCHANGED'],
+        default: 'SOLD',
+    },
+    returnExchangeTxId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ReturnExchangeTransaction' },
+    returnedAt: Date,
+    refundAmount: { type: Number, default: 0 },
+    retainedAmount: { type: Number, default: 0 },
+    debtReduction: { type: Number, default: 0 },
+    exchangedToItem: { type: mongoose_1.Schema.Types.Mixed },
 }, { _id: false });
 const invoiceSchema = new mongoose_1.Schema({
     invoiceCode: {

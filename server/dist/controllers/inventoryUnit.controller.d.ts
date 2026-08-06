@@ -6,5 +6,6 @@ export declare class InventoryUnitController {
     getUnitsByProduct: (req: Request, res: Response, next: NextFunction) => void;
     getById: (req: Request, res: Response, next: NextFunction) => void;
     updateCondition: (req: Request, res: Response, next: NextFunction) => void;
+    updateListPrice: (req: Request, res: Response, next: NextFunction) => void;
 }
 //# sourceMappingURL=inventoryUnit.controller.d.ts.map

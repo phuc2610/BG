@@ -35,6 +35,18 @@ class PurchaseController {
         const purchase = await purchaseService.addPayment(id, req.body);
         res.json({ success: true, data: purchase });
     });
+    // PUT /api/purchases/:id
+    update = asyncHandler(async (req, res) => {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const purchase = await purchaseService.updatePurchase(id, req.body);
+        res.json({ success: true, data: purchase });
+    });
+    // DELETE /api/purchases/:id
+    delete = asyncHandler(async (req, res) => {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const result = await purchaseService.deleteDraft(id);
+        res.json({ success: true, data: result });
+    });
 }
 exports.PurchaseController = PurchaseController;
 //# sourceMappingURL=purchase.controller.js.map

@@ -10,6 +10,8 @@ router.get('/', (0, middleware_1.requirePermission)('purchase.view'), (req, res,
 router.get('/stats', (0, middleware_1.requirePermission)('purchase.view'), (req, res, next) => controller.getStats(req, res, next));
 router.get('/:id', (0, middleware_1.requirePermission)('purchase.view'), (req, res, next) => controller.getById(req, res, next));
 router.post('/', (0, middleware_1.requirePermission)('purchase.create'), (req, res, next) => controller.create(req, res, next));
+router.put('/:id', (0, middleware_1.requirePermission)('purchase.create'), (req, res, next) => controller.update(req, res, next));
+router.delete('/:id', (0, middleware_1.requirePermission)('purchase.create'), (req, res, next) => controller.delete(req, res, next));
 router.post('/:id/payments', (0, middleware_1.requirePermission)('purchase.payment.create'), (req, res, next) => controller.addPayment(req, res, next));
 exports.default = router;
 //# sourceMappingURL=purchase.routes.js.map

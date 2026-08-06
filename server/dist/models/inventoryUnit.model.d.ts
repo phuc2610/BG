@@ -4,13 +4,14 @@ export interface IInventoryUnitDocument extends Document {
     productId: mongoose.Types.ObjectId;
     productCode: string;
     productName: string;
-    serialNumber: string;
+    serialNumber?: string;
     purchaseId?: mongoose.Types.ObjectId;
     purchaseCode?: string;
     supplierId?: mongoose.Types.ObjectId;
     supplierName?: string;
     purchaseDate: Date;
     purchasePrice: number;
+    listPrice?: number;
     condition: ProductCondition;
     supplierWarrantyMonths: number;
     supplierWarrantyStartDate: Date;
@@ -21,6 +22,13 @@ export interface IInventoryUnitDocument extends Document {
     soldInvoiceId?: mongoose.Types.ObjectId;
     soldInvoiceCode?: string;
     soldAt?: Date;
+    history?: Array<{
+        action: string;
+        invoiceId?: mongoose.Types.ObjectId;
+        invoiceCode?: string;
+        note?: string;
+        date: Date;
+    }>;
     createdAt: Date;
     updatedAt: Date;
 }

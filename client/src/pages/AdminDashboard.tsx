@@ -64,6 +64,15 @@ export function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [resettingPass, setResettingPass] = useState(false);
 
+  // Edit User Modal State
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserAccount | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'USER'>('USER');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'PENDING' | 'BLOCKED'>('ACTIVE');
+  const [editPassword, setEditPassword] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
+
   useEffect(() => {
     fetchUsers();
   }, [search, statusFilter, sortBy]);
@@ -205,6 +214,36 @@ export function AdminDashboard() {
       toast.error(err.response?.data?.message || 'Không thể đặt lại mật khẩu');
     } finally {
       setResettingPass(false);
+    }
+  };
+
+  const handleOpenEditUser = (u: UserAccount) => {
+    setSelectedUserForEdit(u);
+    setEditFullName(u.fullName || '');
+    setEditUsername(u.username || '');
+    setEditRole((u.role as any) || 'USER');
+    setEditStatus(u.status || 'ACTIVE');
+    setEditPassword('');
+  };
+
+  const handleSaveUser = async () => {
+    if (!selectedUserForEdit) return;
+    try {
+      setSavingUser(true);
+      await api.put(`/admin/users/${selectedUserForEdit._id}`, {
+        fullName: editFullName,
+        username: editUsername,
+        role: editRole,
+        status: editStatus,
+        password: editPassword.trim() || undefined,
+      });
+      toast.success(`Đã cập nhật thông tin tài khoản ${editUsername} thành công!`);
+      setSelectedUserForEdit(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể cập nhật tài khoản');
+    } finally {
+      setSavingUser(false);
     }
   };
 
@@ -366,10 +405,11 @@ export function AdminDashboard() {
                   <tr>
                     <th className="px-4 py-3">STT</th>
                     <th className="px-4 py-3">Username</th>
+                    <th className="px-4 py-3">Họ và tên người lập</th>
+                    <th className="px-4 py-3 text-center">Vai trò</th>
                     <th className="px-4 py-3 text-center">Trạng thái</th>
                     <th className="px-4 py-3 text-center">Số quyền</th>
                     <th className="px-4 py-3">Ngày đăng ký</th>
-                    <th className="px-4 py-3">Lần đăng nhập cuối</th>
                     <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
@@ -380,6 +420,12 @@ export function AdminDashboard() {
                       <tr key={u._id} className="hover:bg-slate-850/50">
                         <td className="px-4 py-3.5 text-slate-500 font-mono">{index + 1}</td>
                         <td className="px-4 py-3.5 font-bold text-slate-100">{u.username}</td>
+                        <td className="px-4 py-3.5 font-medium text-purple-300">{u.fullName || 'Admin'}</td>
+                        <td className="px-4 py-3.5 text-center font-bold">
+                          <span className={cn('px-2 py-0.5 rounded text-[10px]', u.role === 'ADMIN' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-slate-300')}>
+                            {u.role || 'USER'}
+                          </span>
+                        </td>
                         <td className="px-4 py-3.5 text-center">
                           {u.status === 'ACTIVE' && (
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -408,10 +454,17 @@ export function AdminDashboard() {
                         </td>
                         <td className="px-4 py-3.5 text-right space-x-2">
                           <button
+                            onClick={() => handleOpenEditUser(u)}
+                            className="px-2.5 py-1.5 rounded-lg text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 font-semibold inline-flex items-center gap-1 transition-smooth"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            Sửa thông tin
+                          </button>
+                          <button
                             onClick={() => handleOpenPermissions(u)}
                             className="px-2.5 py-1.5 rounded-lg text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 font-semibold inline-flex items-center gap-1 transition-smooth"
                           >
-                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <ShieldCheck className="w-3.5 h-3.5" />
                             Phân quyền
                           </button>
 
@@ -678,6 +731,111 @@ export function AdminDashboard() {
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
               >
                 {resettingPass ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit User Info Modal */}
+      {selectedUserForEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100">Sửa Thông Tin Tài Khoản</h3>
+                  <p className="text-xs text-slate-400">Cập nhật thông tin cho @{selectedUserForEdit.username}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUserForEdit(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-300">Tên Đăng Nhập *</label>
+                <input
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                  placeholder="Username"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-300">Họ Và Tên Hiển Thị (Người Lập Báo Giá / Hóa Đơn) *</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
+                  placeholder="VD: Nguyễn Đình Thành, Lê Hồng Phúc,..."
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Tên này sẽ tự động hiển thị ở mục "Người lập" trên file PDF Hóa đơn & Báo giá.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-300">Vai Trò</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="USER">USER (Nhân viên)</option>
+                    <option value="ADMIN">ADMIN (Quản trị)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-300">Trạng Thái Tài Khoản</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="ACTIVE">ACTIVE (Hoạt động)</option>
+                    <option value="PENDING">PENDING (Chờ duyệt)</option>
+                    <option value="BLOCKED">BLOCKED (Bị khóa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-300">Đổi Mật Khẩu Mới (Bỏ trống nếu giữ nguyên)</label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                  placeholder="Nhập mật khẩu mới từ 6 ký tự..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-800 pt-4">
+              <button
+                type="button"
+                onClick={() => setSelectedUserForEdit(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUser}
+                disabled={savingUser || !editUsername.trim()}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {savingUser ? 'Đang lưu...' : 'Lưu Thay Đổi'}
               </button>
             </div>
           </div>

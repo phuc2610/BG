@@ -9,6 +9,7 @@ router.use(authenticateUser);
 router.use(requireAdmin);
 
 router.get('/users', (req, res, next) => controller.getUsers(req, res, next));
+router.put('/users/:id', (req, res, next) => controller.updateUser(req, res, next));
 router.get('/users/:id/permissions', (req, res, next) => controller.getUserPermissions(req, res, next));
 router.put('/users/:id/permissions', (req, res, next) => controller.updateUserPermissions(req, res, next));
 router.patch('/users/:id/activate', (req, res, next) => controller.activateUser(req, res, next));

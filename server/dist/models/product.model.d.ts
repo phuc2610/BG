@@ -9,6 +9,7 @@ export interface IProductDocument extends Document {
     brand: string;
     modelName: string;
     description?: string;
+    sellingPrice?: number;
     specs: IProductSpecs;
     images: IProductImage[];
     createdAt: Date;

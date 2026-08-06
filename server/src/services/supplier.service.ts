@@ -74,7 +74,7 @@ export class SupplierService {
     ]);
 
     const purchases = purchasesRes.data;
-    const activePurchases = purchases;
+    const activePurchases = purchases.filter((p) => !p.isDraft && p.status !== 'DRAFT');
 
     let totalPurchased = 0;
     let totalPaid = 0;

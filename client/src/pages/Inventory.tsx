@@ -13,6 +13,7 @@ import {
   Calendar,
   Building2,
   DollarSign,
+  Edit,
   Tag,
   Eye,
   Edit2,
@@ -40,6 +41,27 @@ export function Inventory() {
 
   // Warranty Filter in Drawer
   const [drawerWarrantyFilter, setDrawerWarrantyFilter] = useState<'all' | 'NORMAL' | 'DUE_SOON' | 'EXPIRED'>('all');
+
+  // Inline edit List Price
+  const [editingListPriceId, setEditingListPriceId] = useState<string | null>(null);
+  const [tempListPrice, setTempListPrice] = useState<number>(0);
+  const [savingListPrice, setSavingListPrice] = useState(false);
+
+  const handleSaveListPrice = async (unitId: string) => {
+    try {
+      setSavingListPrice(true);
+      await api.patch(`/inventory-units/${unitId}/list-price`, { listPrice: tempListPrice });
+      toast.success('Đã cập nhật Giá Niêm Yết thành công');
+      setEditingListPriceId(null);
+      if (selectedProduct) {
+        handleOpenDrawer(selectedProduct);
+      }
+    } catch (err: any) {
+      toast.error('Không thể cập nhật Giá Niêm Yết');
+    } finally {
+      setSavingListPrice(false);
+    }
+  };
 
   const fetchGroupedInventory = async () => {
     try {
@@ -86,6 +108,7 @@ export function Inventory() {
   });
 
   const totalStockValuation = groupedProducts.reduce((sum, p) => sum + p.totalStockValue, 0);
+  const totalStockListValuation = groupedProducts.reduce((sum, p) => sum + (p.totalStockListValue || 0), 0);
   const totalAvailableStockCount = groupedProducts.reduce((sum, p) => sum + p.availableStock, 0);
 
   return (
@@ -112,7 +135,7 @@ export function Inventory() {
       </div>
 
       {/* Top Valuation Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-1">
           <div className="text-xs font-semibold text-blue-500 uppercase">Tổng Mã Sản Phẩm Tồn Kho</div>
           <div className="text-2xl font-bold text-[rgb(var(--foreground))]">
@@ -128,9 +151,16 @@ export function Inventory() {
         </div>
 
         <div className="p-5 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-1">
-          <div className="text-xs font-semibold text-indigo-500 uppercase">Tổng Giá Trị Kho (Tính Theo Giá Nhập)</div>
+          <div className="text-xs font-semibold text-indigo-500 uppercase">Tổng Giá Trị Kho (Giá Nhập)</div>
           <div className="text-2xl font-bold text-indigo-500">
             {formatCurrency(totalStockValuation)}
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-1">
+          <div className="text-xs font-semibold text-purple-500 uppercase">Tổng Giá Trị Niêm Yết</div>
+          <div className="text-2xl font-bold text-purple-500">
+            {formatCurrency(totalStockListValuation)}
           </div>
         </div>
       </div>
@@ -316,10 +346,10 @@ export function Inventory() {
                     <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] font-semibold uppercase border-b border-[rgb(var(--border))]">
                       <tr>
                         <th className="px-4 py-3">Serial Number</th>
-                        <th className="px-4 py-3">Tình Trạng</th>
                         <th className="px-4 py-3">Nhà Cung Cấp</th>
                         <th className="px-4 py-3">Ngày Nhập</th>
                         <th className="px-4 py-3 text-right">Giá Nhập</th>
+                        <th className="px-4 py-3 text-right">Giá Niêm Yết</th>
                         <th className="px-4 py-3">Bảo Hành NCC</th>
                         <th className="px-4 py-3 text-center">Trạng Thái Unit</th>
                       </tr>
@@ -328,10 +358,7 @@ export function Inventory() {
                       {filteredUnits.map((u) => (
                         <tr key={u._id} className="hover:bg-[rgb(var(--accent))/30]">
                           <td className="px-4 py-3 font-mono font-bold text-blue-500">
-                            {u.serialNumber}
-                          </td>
-                          <td className="px-4 py-3 font-medium text-[rgb(var(--foreground))]">
-                            {u.condition}
+                            {u.serialNumber || <span className="text-[rgb(var(--muted-foreground))] italic">Không có Serial</span>}
                           </td>
                           <td className="px-4 py-3 text-[rgb(var(--foreground))]">
                             {u.supplierName || 'NCC N/A'}
@@ -341,6 +368,48 @@ export function Inventory() {
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-[rgb(var(--foreground))]">
                             {formatCurrency(u.purchasePrice)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {editingListPriceId === u._id ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={tempListPrice}
+                                  onChange={(e) => setTempListPrice(Number(e.target.value))}
+                                  className="w-24 px-2 py-1 text-xs rounded bg-[rgb(var(--background))] border border-emerald-500 text-emerald-500 font-bold focus:outline-none"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  disabled={savingListPrice}
+                                  onClick={() => handleSaveListPrice(u._id)}
+                                  className="px-2 py-1 text-[10px] rounded bg-emerald-500 text-white font-bold hover:bg-emerald-600"
+                                >
+                                  Lưu
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingListPriceId(null)}
+                                  className="px-1.5 py-1 text-[10px] rounded bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))]"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingListPriceId(u._id);
+                                  setTempListPrice(u.listPrice || u.purchasePrice || 0);
+                                }}
+                                className="font-bold text-emerald-500 hover:underline inline-flex items-center gap-1 group"
+                                title="Click để chỉnh sửa Giá Niêm Yết"
+                              >
+                                <span>{formatCurrency(u.listPrice || u.purchasePrice || 0)}</span>
+                                <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div>{u.supplierWarrantyMonths} tháng</div>

@@ -123,6 +123,7 @@ export default function App() {
             <Route path="suppliers/:id" element={<PermissionGuard permissionKey="supplier.view"><SupplierDetail /></PermissionGuard>} />
             <Route path="purchases" element={<PermissionGuard permissionKey="purchase.view"><Purchases /></PermissionGuard>} />
             <Route path="purchases/new" element={<PermissionGuard permissionKey="purchase.create"><PurchaseForm /></PermissionGuard>} />
+            <Route path="purchases/edit/:id" element={<PermissionGuard permissionKey="purchase.create"><PurchaseForm /></PermissionGuard>} />
             <Route path="products" element={<PermissionGuard permissionKey="product.view"><Products /></PermissionGuard>} />
             <Route path="products/new" element={<PermissionGuard permissionKey="product.create"><ProductForm /></PermissionGuard>} />
             <Route path="products/:id" element={<PermissionGuard permissionKey="product.edit"><ProductForm /></PermissionGuard>} />

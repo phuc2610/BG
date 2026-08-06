@@ -13,5 +13,6 @@ router.get('/by-condition', requirePermission('inventory.condition.view'), (req,
 router.get('/by-product/:productId', requirePermission('inventory.serial.view'), (req, res, next) => controller.getUnitsByProduct(req, res, next));
 router.get('/:id', requirePermission('inventory.serial.view'), (req, res, next) => controller.getById(req, res, next));
 router.patch('/:id/condition', requirePermission('inventory.adjust'), (req, res, next) => controller.updateCondition(req, res, next));
+router.patch('/:id/list-price', requirePermission('inventory.adjust'), (req, res, next) => controller.updateListPrice(req, res, next));
 
 export default router;

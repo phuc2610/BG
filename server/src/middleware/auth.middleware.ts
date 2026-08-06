@@ -8,6 +8,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     username: string;
+    fullName: string;
     role: UserRole;
     permissions: string[];
     maxQuoteDiscountPercent: number;
@@ -61,6 +62,7 @@ export const authenticateUser = async (
     req.user = {
       id: user._id.toString(),
       username: user.username,
+      fullName: user.fullName || user.username,
       role: user.role,
       permissions: user.permissions || [],
       maxQuoteDiscountPercent: user.maxQuoteDiscountPercent || 0,

@@ -12,5 +12,6 @@ router.get('/by-condition', (0, middleware_1.requirePermission)('inventory.condi
 router.get('/by-product/:productId', (0, middleware_1.requirePermission)('inventory.serial.view'), (req, res, next) => controller.getUnitsByProduct(req, res, next));
 router.get('/:id', (0, middleware_1.requirePermission)('inventory.serial.view'), (req, res, next) => controller.getById(req, res, next));
 router.patch('/:id/condition', (0, middleware_1.requirePermission)('inventory.adjust'), (req, res, next) => controller.updateCondition(req, res, next));
+router.patch('/:id/list-price', (0, middleware_1.requirePermission)('inventory.adjust'), (req, res, next) => controller.updateListPrice(req, res, next));
 exports.default = router;
 //# sourceMappingURL=inventoryUnit.routes.js.map

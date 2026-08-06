@@ -199,6 +199,7 @@ export interface IDebt {
 export interface IQuoteItemSnapshot {
   name: string;
   productCode: string;
+  brand?: string;
   condition: ProductCondition;
   costPrice: number;      // Giá vốn snapshot
   specs: IProductSpecs;
@@ -225,6 +226,10 @@ export enum InvoiceStatus {
   PAID = 'Đã thanh toán',
   CANCELLED = 'Đã hủy',
   REFUNDED = 'Hoàn tiền',
+  PARTIALLY_RETURNED = 'Trả hàng một phần',
+  FULLY_RETURNED = 'Đã trả toàn bộ',
+  PARTIALLY_EXCHANGED = 'Đổi hàng một phần',
+  EXCHANGED = 'Đã đổi hàng',
 }
 
 export enum PaymentMethod {
@@ -262,8 +267,89 @@ export enum InventoryUnitStatus {
   SOLD = 'SOLD',
   WARRANTY = 'WARRANTY',
   RETURNED = 'RETURNED',
+  RETURN_INSPECTION = 'RETURN_INSPECTION',
   DAMAGED = 'DAMAGED',
 }
+
+export enum ReturnItemCondition {
+  GOOD_RESTOCK = 'Tốt / nhập lại kho',
+  INSPECTION = 'Chờ kiểm tra',
+  WARRANTY = 'Lỗi / bảo hành',
+  DAMAGED = 'Hỏng / không nhập kho',
+}
+
+export enum ReturnExchangeType {
+  RETURN = 'RETURN',
+  EXCHANGE = 'EXCHANGE',
+}
+
+export interface IReturnItem {
+  order: number; // item index in invoice.items
+  productId?: string;
+  productCode: string;
+  productName: string;
+  serialNumber?: string;
+  originalSalePrice: number;
+  originalCostPrice: number;
+  refundAmount: number;     // Cash refunded to customer for this item
+  debtReduction: number;    // Amount allocated to reduce customer debt
+  retainedAmount: number;   // originalSalePrice - refundAmount - debtReduction
+  condition: ReturnItemCondition;
+  inventoryStatusTarget: InventoryUnitStatus;
+  status: 'RETURNED';
+}
+
+export interface IExchangeItem {
+  order: number; // item index in invoice.items
+  oldProductId?: string;
+  oldProductCode: string;
+  oldProductName: string;
+  oldSerialNumber?: string;
+  oldSalePrice: number;
+  oldCostPrice: number;
+  oldCondition: ReturnItemCondition;
+  oldInventoryStatusTarget: InventoryUnitStatus;
+
+  newProductId: string;
+  newProductCode: string;
+  newProductName: string;
+  newSerialNumber?: string;
+  newSalePrice: number;
+  newCostPrice: number;
+
+  priceDifference: number;      // newSalePrice - oldSalePrice
+  customerPaidExtra: number;    // Cash/bank transfer paid by customer
+  customerDebtAdded: number;    // Extra debt added to customer
+  cashRefund: number;           // Cash refunded to customer (if new item cheaper)
+  debtReduction: number;        // Debt reduced for customer
+  retainedAmount: number;       // Store retained amount from old item
+  status: 'EXCHANGED';
+}
+
+export interface IReturnExchangeTransaction {
+  _id?: string;
+  transactionCode: string; // TRA202608060001 or DOI202608060001
+  invoiceId: string;
+  invoiceCode: string;
+  customerId?: string;
+  customerName: string;
+  type: ReturnExchangeType;
+  returnedItems: IReturnItem[];
+  exchangedItems: IExchangeItem[];
+  totalOriginalValue: number;
+  totalRefundAmount: number;
+  totalDebtReduction: number;
+  totalRetainedAmount: number;
+  totalCustomerPaidExtra: number;
+  totalCustomerDebtAdded: number;
+  profitAdjustment: number;
+  reason?: string;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 
 export interface ISupplier {
   _id?: string;
@@ -373,7 +459,22 @@ export interface IInvoiceItem {
   selectedSerials?: string[]; // Mảng các Serial Number được chọn trong Hóa đơn Nháp
   total: number;
   order: number;
+  itemStatus?: 'SOLD' | 'RETURNED' | 'EXCHANGED';
+  returnExchangeTxId?: string;
+  returnedAt?: Date;
+  refundAmount?: number;
+  retainedAmount?: number;
+  debtReduction?: number;
+  exchangedToItem?: {
+    productId: string;
+    productCode: string;
+    productName: string;
+    serialNumber?: string;
+    unitPrice: number;
+    costPrice: number;
+  };
 }
+
 
 export interface IQuote {
   _id?: string;
@@ -473,6 +574,8 @@ export interface ISettings {
   terms: string[];
   benefits?: IBenefitItem[];
   footerText: string;
+  quoteValidityDays?: number;
+  quoteNotes?: string[];
 }
 
 export interface PaginationQuery {

@@ -6,6 +6,7 @@ export interface IInventoryDocument extends Document {
   product: mongoose.Types.ObjectId;
   condition: ProductCondition;
   costPrice: number;
+  listPrice?: number;
   quantity: number;
   supplier?: string;
   supplierWarranty?: string;
@@ -52,6 +53,11 @@ const inventorySchema = new Schema<IInventoryDocument>(
     costPrice: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    listPrice: {
+      type: Number,
+      default: 0,
       min: 0,
     },
     quantity: {

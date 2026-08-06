@@ -13,6 +13,9 @@ import {
   Eye,
   CreditCard,
   X,
+  Clock,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { PaymentMethod } from '@/types';
@@ -37,6 +40,17 @@ export function Purchases() {
   const [bankName, setBankName] = useState<string>('MB Bank');
   const [paymentNote, setPaymentNote] = useState<string>('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  const handleDeleteDraft = async (pId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa phiếu nhập lưu tạm này?')) return;
+    try {
+      await api.delete(`/purchases/${pId}`);
+      toast.success('Đã xóa phiếu lưu tạm thành công');
+      fetchPurchases();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể xóa phiếu nháp');
+    }
+  };
 
   const fetchPurchases = async () => {
     try {
@@ -177,12 +191,13 @@ export function Purchases() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          {['all', 'UNPAID', 'PARTIALLY_PAID', 'PAID'].map((st) => (
+        {/* Status Filter Tabs */}
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1">
+          {['all', 'DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID'].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors whitespace-nowrap ${
                 statusFilter === st
                   ? 'bg-blue-500/10 text-blue-500 border-blue-500/30 font-semibold'
                   : 'bg-[rgb(var(--background))] text-[rgb(var(--muted-foreground))] border-[rgb(var(--border))]'
@@ -190,6 +205,8 @@ export function Purchases() {
             >
               {st === 'all'
                 ? 'Tất cả'
+                : st === 'DRAFT'
+                ? '📝 Lưu tạm (Nháp)'
                 : st === 'PAID'
                 ? 'Đã trả đủ'
                 : st === 'PARTIALLY_PAID'
@@ -298,46 +315,89 @@ export function Purchases() {
                       <td className="px-5 py-4 text-center">
                         <span
                           className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                            p.status === 'PAID'
+                            p.isDraft || p.status === 'DRAFT'
+                              ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30 font-bold'
+                              : p.status === 'PAID'
                               ? 'bg-emerald-500/10 text-emerald-500'
                               : p.status === 'PARTIALLY_PAID'
                               ? 'bg-amber-500/10 text-amber-500'
                               : 'bg-red-500/10 text-red-500'
                           }`}
                         >
-                          {p.status === 'PAID'
+                          {p.isDraft || p.status === 'DRAFT'
+                            ? '📝 Lưu tạm (Nháp)'
+                            : p.status === 'PAID'
                             ? 'Đã trả đủ'
                             : p.status === 'PARTIALLY_PAID'
                             ? 'Trả 1 phần'
                             : 'Chưa trả'}
                         </span>
                       </td>
-                    <td className="px-5 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setViewPurchaseDetail(p);
-                          }}
-                          className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors"
-                          title="Xem chi tiết phiếu nhập"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {p.remainingAmount > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedPurchase(p);
-                              setPaymentAmount(p.remainingAmount);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
-                          >
-                            Trả NCC
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                      <td className="px-5 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {p.isDraft || p.status === 'DRAFT' ? (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/purchases/edit/${p._id}`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center gap-1 transition-colors"
+                                title="Chỉnh sửa và Duyệt phiếu nháp"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>Sửa / Duyệt</span>
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteDraft(p._id);
+                                }}
+                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                                title="Xóa phiếu lưu tạm"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewPurchaseDetail(p);
+                                }}
+                                className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors"
+                                title="Xem chi tiết phiếu nhập"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/purchases/edit/${p._id}`);
+                                }}
+                                className="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-500/10 transition-colors"
+                                title="Chỉnh sửa phiếu nhập"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              {p.remainingAmount > 0 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedPurchase(p);
+                                    setPaymentAmount(p.remainingAmount);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
+                                >
+                                  Trả NCC
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
                   </tr>
                 );
               })}
@@ -472,12 +532,26 @@ export function Purchases() {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setViewPurchaseDetail(null)}
-                className="p-1 rounded-lg text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pId = viewPurchaseDetail._id;
+                    setViewPurchaseDetail(null);
+                    navigate(`/purchases/edit/${pId}`);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Sửa Phiếu Nhập</span>
+                </button>
+                <button
+                  onClick={() => setViewPurchaseDetail(null)}
+                  className="p-1.5 rounded-lg text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6 overflow-y-auto flex-1">

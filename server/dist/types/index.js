@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InventoryUnitStatus = exports.PaymentMethod = exports.InvoiceStatus = exports.CustomerType = exports.WARRANTY_OPTIONS = exports.DiscountType = exports.QuoteStatus = exports.ProductCondition = exports.ProductCategory = void 0;
+exports.ReturnExchangeType = exports.ReturnItemCondition = exports.InventoryUnitStatus = exports.PaymentMethod = exports.InvoiceStatus = exports.CustomerType = exports.WARRANTY_OPTIONS = exports.DiscountType = exports.QuoteStatus = exports.ProductCondition = exports.ProductCategory = void 0;
 // ============================================
 // Enums
 // ============================================
@@ -65,6 +65,10 @@ var InvoiceStatus;
     InvoiceStatus["PAID"] = "\u0110\u00E3 thanh to\u00E1n";
     InvoiceStatus["CANCELLED"] = "\u0110\u00E3 h\u1EE7y";
     InvoiceStatus["REFUNDED"] = "Ho\u00E0n ti\u1EC1n";
+    InvoiceStatus["PARTIALLY_RETURNED"] = "Tr\u1EA3 h\u00E0ng m\u1ED9t ph\u1EA7n";
+    InvoiceStatus["FULLY_RETURNED"] = "\u0110\u00E3 tr\u1EA3 to\u00E0n b\u1ED9";
+    InvoiceStatus["PARTIALLY_EXCHANGED"] = "\u0110\u1ED5i h\u00E0ng m\u1ED9t ph\u1EA7n";
+    InvoiceStatus["EXCHANGED"] = "\u0110\u00E3 \u0111\u1ED5i h\u00E0ng";
 })(InvoiceStatus || (exports.InvoiceStatus = InvoiceStatus = {}));
 var PaymentMethod;
 (function (PaymentMethod) {
@@ -81,6 +85,19 @@ var InventoryUnitStatus;
     InventoryUnitStatus["SOLD"] = "SOLD";
     InventoryUnitStatus["WARRANTY"] = "WARRANTY";
     InventoryUnitStatus["RETURNED"] = "RETURNED";
+    InventoryUnitStatus["RETURN_INSPECTION"] = "RETURN_INSPECTION";
     InventoryUnitStatus["DAMAGED"] = "DAMAGED";
 })(InventoryUnitStatus || (exports.InventoryUnitStatus = InventoryUnitStatus = {}));
+var ReturnItemCondition;
+(function (ReturnItemCondition) {
+    ReturnItemCondition["GOOD_RESTOCK"] = "T\u1ED1t / nh\u1EADp l\u1EA1i kho";
+    ReturnItemCondition["INSPECTION"] = "Ch\u1EDD ki\u1EC3m tra";
+    ReturnItemCondition["WARRANTY"] = "L\u1ED7i / b\u1EA3o h\u00E0nh";
+    ReturnItemCondition["DAMAGED"] = "H\u1ECFng / kh\u00F4ng nh\u1EADp kho";
+})(ReturnItemCondition || (exports.ReturnItemCondition = ReturnItemCondition = {}));
+var ReturnExchangeType;
+(function (ReturnExchangeType) {
+    ReturnExchangeType["RETURN"] = "RETURN";
+    ReturnExchangeType["EXCHANGE"] = "EXCHANGE";
+})(ReturnExchangeType || (exports.ReturnExchangeType = ReturnExchangeType = {}));
 //# sourceMappingURL=index.js.map

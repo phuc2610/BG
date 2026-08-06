@@ -8,6 +8,7 @@ const controller = new admin_controller_1.AdminController();
 router.use(auth_middleware_1.authenticateUser);
 router.use(auth_middleware_1.requireAdmin);
 router.get('/users', (req, res, next) => controller.getUsers(req, res, next));
+router.put('/users/:id', (req, res, next) => controller.updateUser(req, res, next));
 router.get('/users/:id/permissions', (req, res, next) => controller.getUserPermissions(req, res, next));
 router.put('/users/:id/permissions', (req, res, next) => controller.updateUserPermissions(req, res, next));
 router.patch('/users/:id/activate', (req, res, next) => controller.activateUser(req, res, next));

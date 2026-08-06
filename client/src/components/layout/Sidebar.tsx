@@ -19,6 +19,7 @@ import {
   Monitor,
   LogOut,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 
 const navItemsConfig = [
@@ -36,7 +37,7 @@ const navItemsConfig = [
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout, hasPermission } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,6 +45,11 @@ export function Sidebar() {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleNavClick = () => {
+    // Close mobile drawer on nav click
+    setMobileSidebarOpen(false);
   };
 
   const visibleNavItems = navItemsConfig.filter((item) => hasPermission(item.permission));
@@ -57,21 +63,26 @@ export function Sidebar() {
     });
   }
 
-  return (
+  const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
     <aside
       className={cn(
-        'fixed top-0 left-0 h-screen z-30 flex flex-col border-r transition-all duration-300 ease-out',
+        'flex flex-col border-r h-full',
         'bg-[rgb(var(--card))] border-[rgb(var(--border))]',
-        sidebarCollapsed ? 'w-[var(--sidebar-collapsed-width)]' : 'w-[var(--sidebar-width)]'
+        isMobile
+          ? 'w-[260px]'
+          : cn(
+              'fixed top-0 left-0 h-screen z-30 transition-all duration-300 ease-out',
+              sidebarCollapsed ? 'w-[var(--sidebar-collapsed-width)]' : 'w-[var(--sidebar-width)]'
+            )
       )}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 h-[var(--header-height)] border-b border-[rgb(var(--border))]">
+      <div className="flex items-center gap-3 px-5 h-[var(--header-height)] border-b border-[rgb(var(--border))] flex-shrink-0">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0">
           <Monitor className="w-5 h-5 text-white" />
         </div>
-        {!sidebarCollapsed && (
-          <div className="animate-fade-in">
+        {(!sidebarCollapsed || isMobile) && (
+          <div className="animate-fade-in flex-1 min-w-0">
             <h1 className="text-sm font-bold tracking-tight text-[rgb(var(--foreground))]">
               NP Computer
             </h1>
@@ -79,6 +90,14 @@ export function Sidebar() {
               Kho Chung & Phân Quyền
             </p>
           </div>
+        )}
+        {isMobile && (
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="p-1.5 rounded-lg text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))] transition-smooth flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         )}
       </div>
 
@@ -93,12 +112,13 @@ export function Sidebar() {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={isMobile ? handleNavClick : undefined}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-smooth group',
                 isActive
                   ? 'bg-blue-500/10 text-blue-500'
                   : 'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))]',
-                sidebarCollapsed && 'justify-center px-0'
+                !isMobile && sidebarCollapsed && 'justify-center px-0'
               )}
             >
               <item.icon
@@ -107,15 +127,15 @@ export function Sidebar() {
                   isActive ? 'text-blue-500' : 'group-hover:text-[rgb(var(--foreground))]'
                 )}
               />
-              {!sidebarCollapsed && <span>{item.label}</span>}
+              {(!sidebarCollapsed || isMobile) && <span>{item.label}</span>}
             </NavLink>
           );
         })}
       </nav>
 
       {/* User Info & Logout */}
-      <div className="px-3 py-3 border-t border-[rgb(var(--border))] space-y-2">
-        {!sidebarCollapsed && (
+      <div className="px-3 py-3 border-t border-[rgb(var(--border))] space-y-2 flex-shrink-0">
+        {(!sidebarCollapsed || isMobile) && (
           <div className="px-2 py-1.5 rounded-xl bg-[rgb(var(--muted))/50] flex items-center justify-between text-xs">
             <div className="truncate">
               <div className="font-bold text-[rgb(var(--foreground))] truncate">{user?.username || 'User'}</div>
@@ -125,31 +145,57 @@ export function Sidebar() {
             </div>
             <button
               onClick={handleLogout}
-              className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-smooth"
+              className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-smooth flex-shrink-0"
               title="Đăng xuất"
             >
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         )}
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs',
-            'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]',
-            'hover:bg-[rgb(var(--accent))] transition-smooth'
-          )}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-4 h-4" />
-          ) : (
-            <>
-              <ChevronLeft className="w-4 h-4" />
-              <span>Thu gọn</span>
-            </>
-          )}
-        </button>
+        {!isMobile && (
+          <button
+            onClick={toggleSidebar}
+            className={cn(
+              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs',
+              'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]',
+              'hover:bg-[rgb(var(--accent))] transition-smooth'
+            )}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span>Thu gọn</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar — always visible on lg+ */}
+      <div className="hidden lg:block">
+        <SidebarContent isMobile={false} />
+      </div>
+
+      {/* Mobile/Tablet Drawer */}
+      {mobileSidebarOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="fixed top-0 left-0 h-screen z-50 lg:hidden animate-slide-in-left">
+            <SidebarContent isMobile={true} />
+          </div>
+        </>
+      )}
+    </>
   );
 }

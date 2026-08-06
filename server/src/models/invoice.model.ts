@@ -104,9 +104,21 @@ const invoiceItemSchema = new Schema<IInvoiceItem>(
     selectedSerials: { type: [String], default: [] },
     total: { type: Number, required: true, min: 0 },
     order: { type: Number, default: 0 },
+    itemStatus: {
+      type: String,
+      enum: ['SOLD', 'RETURNED', 'EXCHANGED'],
+      default: 'SOLD',
+    },
+    returnExchangeTxId: { type: Schema.Types.ObjectId, ref: 'ReturnExchangeTransaction' },
+    returnedAt: Date,
+    refundAmount: { type: Number, default: 0 },
+    retainedAmount: { type: Number, default: 0 },
+    debtReduction: { type: Number, default: 0 },
+    exchangedToItem: { type: Schema.Types.Mixed },
   },
   { _id: false }
 );
+
 
 const invoiceSchema = new Schema<IInvoiceDocument>(
   {

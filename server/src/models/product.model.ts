@@ -14,6 +14,7 @@ export interface IProductDocument extends Document {
   brand: string;
   modelName: string;
   description?: string;
+  sellingPrice?: number;
   specs: IProductSpecs;
   images: IProductImage[];
   createdAt: Date;
@@ -86,6 +87,7 @@ const productSchema = new Schema<IProductDocument>(
       required: true,
     },
     description: String,
+    sellingPrice: { type: Number, default: 0, min: 0 },
     specs: {
       type: productSpecsSchema,
       default: () => ({}),

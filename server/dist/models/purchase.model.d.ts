@@ -16,6 +16,7 @@ export interface IPurchaseItemDocument {
     productName: string;
     quantity: number;
     costPrice: number;
+    listPrice?: number;
     condition: ProductCondition;
     supplierWarrantyMonths: number;
     serials: string[];
@@ -36,7 +37,8 @@ export interface IPurchaseDocument extends Document {
     paidAmount: number;
     remainingAmount: number;
     dueDate?: Date;
-    status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
+    isDraft?: boolean;
+    status: 'DRAFT' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
     payments: ISupplierPaymentDocument[];
     createdAt: Date;
     updatedAt: Date;

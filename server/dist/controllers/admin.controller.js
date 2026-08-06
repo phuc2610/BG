@@ -10,13 +10,20 @@ const middleware_1 = require("../middleware");
 class AdminController {
     // GET /api/admin/users
     getUsers = (0, middleware_1.asyncHandler)(async (req, res) => {
-        const { search, status, sort } = req.query;
-        const filter = { role: models_1.UserRole.USER };
+        const { search, status, sort, role } = req.query;
+        const filter = {};
+        if (role && role !== 'all') {
+            filter.role = role;
+        }
         if (status && status !== 'all') {
             filter.status = status;
         }
         if (search && search.trim()) {
-            filter.username = new RegExp(search.trim(), 'i');
+            const regex = new RegExp(search.trim(), 'i');
+            filter.$or = [
+                { username: regex },
+                { fullName: regex },
+            ];
         }
         let sortObj = { registeredAt: -1 };
         if (sort === 'oldest')
@@ -27,7 +34,7 @@ class AdminController {
             .select('-passwordHash')
             .sort(sortObj)
             .exec();
-        const allUsers = await models_1.User.find({ role: models_1.UserRole.USER }).exec();
+        const allUsers = await models_1.User.find().exec();
         const totalUsers = allUsers.length;
         const activeUsers = allUsers.filter((u) => u.status === models_1.UserStatus.ACTIVE).length;
         const pendingUsers = allUsers.filter((u) => u.status === models_1.UserStatus.PENDING).length;
@@ -42,6 +49,50 @@ class AdminController {
                     blockedUsers,
                 },
                 users,
+            },
+        });
+    });
+    // PUT /api/admin/users/:id - Chỉnh sửa thông tin tài khoản (fullName, username, role, status, password)
+    updateUser = (0, middleware_1.asyncHandler)(async (req, res) => {
+        const { id } = req.params;
+        const { fullName, username, role, status, password } = req.body;
+        const user = await models_1.User.findById(id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Tài khoản không tồn tại' });
+        }
+        if (username && username.trim() !== user.username) {
+            const existing = await models_1.User.findOne({ usernameNormalized: username.trim().toLowerCase(), _id: { $ne: user._id } });
+            if (existing) {
+                return res.status(400).json({ success: false, message: 'Tên đăng nhập đã được sử dụng' });
+            }
+            user.username = username.trim();
+            user.usernameNormalized = username.trim().toLowerCase();
+        }
+        if (fullName !== undefined) {
+            user.fullName = fullName.trim() || 'Admin';
+        }
+        if (role && Object.values(models_1.UserRole).includes(role)) {
+            user.role = role;
+        }
+        if (status && Object.values(models_1.UserStatus).includes(status)) {
+            user.status = status;
+            user.isActive = status === models_1.UserStatus.ACTIVE;
+        }
+        if (password && password.trim().length >= 6) {
+            const salt = await bcryptjs_1.default.genSalt(10);
+            user.passwordHash = await bcryptjs_1.default.hash(password.trim(), salt);
+        }
+        await user.save();
+        res.json({
+            success: true,
+            message: `Đã cập nhật thông tin tài khoản ${user.username} thành công`,
+            data: {
+                _id: user._id,
+                username: user.username,
+                fullName: user.fullName,
+                role: user.role,
+                status: user.status,
+                isActive: user.isActive,
             },
         });
     });

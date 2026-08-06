@@ -18,6 +18,19 @@ export class InventoryUnitService {
     return unit;
   }
 
+  async updateListPrice(id: string, listPrice: number) {
+    const unit = await InventoryUnit.findById(id);
+    if (!unit) throw new AppError('Sản phẩm / Serial không tồn tại', 404);
+    const val = Math.max(0, Number(listPrice) || 0);
+    unit.listPrice = val;
+    await unit.save();
+
+    if (unit.productId) {
+      await Product.findByIdAndUpdate(unit.productId, { sellingPrice: val });
+    }
+    return unit;
+  }
+
   /**
    * Aggregates physical inventory grouped by PRODUCT (Master Catalog item).
    * Calculates Available stock count, Reserved count, Sold count, and Stock Value at purchase price.
@@ -50,17 +63,29 @@ export class InventoryUnitService {
         const reservedUnits = units.filter((u) => u.status === InventoryUnitStatus.RESERVED);
         const soldUnits = units.filter((u) => u.status === InventoryUnitStatus.SOLD);
 
-        // Valuation of in-stock items at actual purchase cost
+        // Valuation of in-stock items at actual purchase cost and list price
         const inStockUnits = units.filter(
           (u) => u.status === InventoryUnitStatus.AVAILABLE || u.status === InventoryUnitStatus.RESERVED
         );
         const totalStockValue = inStockUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
 
-        // Latest purchase price
-        const sortedByDate = [...units].sort(
+        // Latest purchase unit for price info
+        const activeUnitsList = inStockUnits.length > 0 ? inStockUnits : units;
+        const sortedByDate = [...activeUnitsList].sort(
           (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
         );
-        const latestCostPrice = sortedByDate.length > 0 ? sortedByDate[0].purchasePrice : 0;
+        const latestUnit = sortedByDate.length > 0 ? sortedByDate[0] : null;
+        const latestCostPrice = latestUnit ? latestUnit.purchasePrice : 0;
+        const latestListPrice = (latestUnit && latestUnit.listPrice && latestUnit.listPrice > 0)
+          ? latestUnit.listPrice
+          : ((product as any).sellingPrice && (product as any).sellingPrice > 0)
+          ? (product as any).sellingPrice
+          : latestCostPrice;
+
+        const totalStockListValue = inStockUnits.reduce(
+          (sum, u) => sum + (u.listPrice || (product as any).sellingPrice || u.purchasePrice || 0),
+          0
+        );
 
         return {
           productId: product._id,
@@ -74,7 +99,9 @@ export class InventoryUnitService {
           soldStock: soldUnits.length,
           totalStock: availableUnits.length + reservedUnits.length,
           latestCostPrice,
+          latestListPrice,
           totalStockValue,
+          totalStockListValue,
         };
       })
     );
@@ -114,6 +141,7 @@ export class InventoryUnitService {
           availableStock: 0,
           reservedStock: 0,
           costPrice: 0,
+          listPrice: p.sellingPrice || 0,
           suggestedSellingPrice: p.sellingPrice || 0,
           imageUrl: p.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
           specs: product.specs,
@@ -130,10 +158,19 @@ export class InventoryUnitService {
           const avail = condUnits.filter((u) => u.status === InventoryUnitStatus.AVAILABLE).length;
           const res = condUnits.filter((u) => u.status === InventoryUnitStatus.RESERVED).length;
 
-          const sortedByDate = [...condUnits].sort(
+          const inStockCondUnits = condUnits.filter(
+            (u) => u.status === InventoryUnitStatus.AVAILABLE || u.status === InventoryUnitStatus.RESERVED
+          );
+          const sortedByDate = [...inStockCondUnits.length > 0 ? inStockCondUnits : condUnits].sort(
             (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
           );
-          const latestCostPrice = sortedByDate.length > 0 ? sortedByDate[0].purchasePrice : 0;
+          const latestUnit = sortedByDate.length > 0 ? sortedByDate[0] : null;
+          const latestCostPrice = latestUnit ? latestUnit.purchasePrice : 0;
+          const latestListPrice = (latestUnit && latestUnit.listPrice && latestUnit.listPrice > 0)
+            ? latestUnit.listPrice
+            : (p.sellingPrice && p.sellingPrice > 0)
+            ? p.sellingPrice
+            : latestCostPrice;
 
           resultVariants.push({
             productId: product._id,
@@ -144,7 +181,8 @@ export class InventoryUnitService {
             availableStock: avail,
             reservedStock: res,
             costPrice: latestCostPrice,
-            suggestedSellingPrice: p.sellingPrice || (latestCostPrice ? Math.round((latestCostPrice * 1.25) / 10000) * 10000 : 0),
+            listPrice: latestListPrice,
+            suggestedSellingPrice: latestListPrice,
             imageUrl: p.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
             specs: product.specs,
           });

@@ -2,15 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { cn, formatCurrency, formatDate, invoiceStatusColors } from '@/lib/utils';
 import { InvoiceStatus, PaymentMethod } from '@/types';
-import type { Invoice, InvoiceItem, InventoryUnitRecord } from '@/types';
+import type { Invoice, InvoiceItem, InventoryUnitRecord, IReturnExchangeTransaction } from '@/types';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Printer, Download, CreditCard, Plus, FileText,
   User, Calendar, DollarSign, Package, CheckCircle2, Clock,
   AlertCircle, ShieldCheck, X, Loader2, Save, Trash2, Tag, ExternalLink,
-  Check, Lock, CheckSquare,
+  Check, Lock, CheckSquare, RotateCcw, ArrowRightLeft,
 } from 'lucide-react';
+import { ReturnExchangeModal } from '@/components/invoice/ReturnExchangeModal';
 
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -35,15 +36,25 @@ export function InvoiceDetail() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
+  // Return / Exchange Modal & History State
+  const [showReturnExchangeModal, setShowReturnExchangeModal] = useState(false);
+  const [returnHistory, setReturnHistory] = useState<IReturnExchangeTransaction[]>([]);
+
   const fetchInvoice = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await api.get(`/invoices/${id}`);
-      setInvoice(res.data.data);
-      setFinalizePaid(res.data.data.totalPaid || 0);
-      if (res.data.data.dueDate) {
-        setFinalizeDueDate(new Date(res.data.data.dueDate).toISOString().split('T')[0]);
+      const [resInv, resHistory] = await Promise.all([
+        api.get(`/invoices/${id}`),
+        api.get(`/invoices/${id}/return-exchange-history`),
+      ]);
+      setInvoice(resInv.data.data);
+      setFinalizePaid(resInv.data.data.totalPaid || 0);
+      if (resInv.data.data.dueDate) {
+        setFinalizeDueDate(new Date(resInv.data.data.dueDate).toISOString().split('T')[0]);
+      }
+      if (resHistory.data.success) {
+        setReturnHistory(resHistory.data.data);
       }
     } catch {
       toast.error('Không thể tải thông tin hóa đơn');
@@ -80,7 +91,6 @@ export function InvoiceDetail() {
       setLoadingSerials(true);
       const res = await api.get(`/inventory-units/by-product/${productId}`);
       if (res.data.success) {
-        // Show units that are AVAILABLE or RESERVED by this invoice
         const units = res.data.data.filter(
           (u: InventoryUnitRecord) =>
             u.status === 'AVAILABLE' ||
@@ -186,6 +196,7 @@ export function InvoiceDetail() {
     } finally {
       setDownloadingPdf(false);
     }
+
   };
 
   const handlePrint = () => {
@@ -207,6 +218,9 @@ export function InvoiceDetail() {
   const isDebt = invoice.remainingAmount > 0;
   const isPaidInFull = invoice.remainingAmount <= 0;
 
+  // Check if any items are non-returned/non-exchanged
+  const hasEligibleItems = invoice.items.some((item) => (item.itemStatus || 'SOLD') === 'SOLD');
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
       {/* Top Navigation & Status Bar */}
@@ -227,6 +241,16 @@ export function InvoiceDetail() {
             >
               <CheckSquare className="w-4 h-4" />
               CHỐT HÓA ĐƠN (TRỪ KHO)
+            </button>
+          )}
+
+          {isFinalized && invoice.status !== InvoiceStatus.CANCELLED && hasEligibleItems && (
+            <button
+              onClick={() => setShowReturnExchangeModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-bold shadow-lg shadow-amber-500/20 hover:opacity-90 transition-smooth"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Trả / Đổi Hàng
             </button>
           )}
 
@@ -291,7 +315,7 @@ export function InvoiceDetail() {
               {isFinalized ? (
                 <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5" />
-                  ĐÃ CHỐT HÓA ĐƠN (ĐÃ TRỪ KHO)
+                  ĐÃ CHỐT HÓA ĐƠN ({invoice.status})
                 </span>
               ) : (
                 <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1.5">
@@ -359,11 +383,11 @@ export function InvoiceDetail() {
           </div>
         </div>
 
-        {/* Product Items Table with Serial Selection */}
+        {/* Product Items Table with Serial Selection & Status Badges */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-[rgb(var(--foreground))]">
-              Danh Sách Sản Phẩm / Serial Hóa Đơn ({invoice.items.length})
+              Danh Sách Sản Phẩm Hóa Đơn ({invoice.items.length})
             </h3>
           </div>
 
@@ -376,14 +400,12 @@ export function InvoiceDetail() {
                   <th className="px-4 py-2.5 text-center">Bảo Hành</th>
                   <th className="px-4 py-2.5 text-right">Đơn Giá</th>
                   <th className="px-4 py-2.5 text-center">SL</th>
-                  <th className="px-4 py-2.5">Serial Được Chọn</th>
                   <th className="px-4 py-2.5 text-right">Thành Tiền</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--border))]">
                 {invoice.items.map((item, idx) => {
                   const selectedCount = (item.selectedSerials || []).length;
-                  const isFullySelected = selectedCount === item.quantity;
 
                   return (
                     <tr key={idx} className="hover:bg-[rgb(var(--accent))]/50">
@@ -400,8 +422,54 @@ export function InvoiceDetail() {
                             )}
                           </div>
                           <div>
-                            <p className="font-semibold text-sm">{item.productSnapshot.name}</p>
-                            <span className="font-mono text-[11px] text-blue-500">{item.productSnapshot.productCode}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-sm">{item.productSnapshot.name}</p>
+                              {item.itemStatus === 'RETURNED' && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                  [ĐÃ TRẢ]
+                                </span>
+                              )}
+                              {item.itemStatus === 'EXCHANGED' && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                  [ĐÃ ĐỔI]
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="font-mono text-[11px] text-blue-500">{item.productSnapshot.productCode}</span>
+                              {item.serialNumber && (
+                                <span className="font-mono text-[11px] text-[rgb(var(--muted-foreground))]">
+                                  • S/N: {item.serialNumber}
+                                </span>
+                              )}
+                              {isDraft && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSerialModal(idx)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                    selectedCount > 0
+                                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                  }`}
+                                >
+                                  {selectedCount > 0 ? `✓ Serial (${selectedCount}/${item.quantity})` : `+ Chọn Serial (tùy chọn)`}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Exchanged Target Item Details Sub-Row */}
+                            {item.itemStatus === 'EXCHANGED' && item.exchangedToItem && (
+                              <div className="mt-1.5 p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300 flex items-center gap-2">
+                                <span>↓ Đổi sang:</span>
+                                <strong className="text-white">{item.exchangedToItem.productName}</strong>
+                                {item.exchangedToItem.serialNumber && (
+                                  <span className="font-mono text-[10px] text-purple-400">
+                                    (S/N: {item.exchangedToItem.serialNumber})
+                                  </span>
+                                )}
+                                <span>• Giá: {formatCurrency(item.exchangedToItem.unitPrice)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -412,46 +480,6 @@ export function InvoiceDetail() {
                       </td>
                       <td className="px-4 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
                       <td className="px-4 py-3 text-center font-bold">{item.quantity}</td>
-                      <td className="px-4 py-3">
-                        {isDraft ? (
-                          <div className="space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenSerialModal(idx)}
-                              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                                isFullySelected
-                                  ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-500/20'
-                                  : 'bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20'
-                              }`}
-                            >
-                              <span>
-                                {isFullySelected ? `✓ Đã chọn ${selectedCount}/${item.quantity} Serial` : `Chọn Serial (${selectedCount}/${item.quantity})`}
-                              </span>
-                            </button>
-                            {item.selectedSerials && item.selectedSerials.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {item.selectedSerials.map((s) => (
-                                  <span key={s} className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 font-semibold border border-blue-500/20">
-                                    {s}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {item.selectedSerials && item.selectedSerials.length > 0 ? (
-                              item.selectedSerials.map((s) => (
-                                <span key={s} className="font-mono text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-500/20">
-                                  S/N: {s}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-[11px] text-[rgb(var(--muted-foreground))] italic">Không gắn Serial</span>
-                            )}
-                          </div>
-                        )}
-                      </td>
                       <td className="px-4 py-3 text-right font-bold text-[rgb(var(--foreground))]">{formatCurrency(item.total)}</td>
                     </tr>
                   );
@@ -495,13 +523,121 @@ export function InvoiceDetail() {
                 </div>
                 <div className="flex justify-between text-xs font-bold text-emerald-500 pt-1 border-t border-emerald-500/20">
                   <span>Lợi Nhuận Gộp Đơn Hàng:</span>
-                  <span>+{formatCurrency(invoice.profit || (invoice.grandTotal - (invoice.totalCost || 0)))}</span>
+                  <span>+{formatCurrency(invoice.profit || 0)}</span>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* LỊCH SỬ TRẢ / ĐỔI HÀNG SECTION */}
+      {returnHistory.length > 0 && (
+        <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-[rgb(var(--border))] pb-4">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-amber-500" />
+              <h2 className="text-base font-bold">LỊCH SỬ TRẢ / ĐỔI HÀNG ({returnHistory.length})</h2>
+            </div>
+            <span className="text-xs text-[rgb(var(--muted-foreground))] font-mono">
+              Tổng số giao dịch: {returnHistory.length}
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {returnHistory.map((tx) => {
+              const isReturn = tx.type === 'RETURN';
+
+              return (
+                <div
+                  key={tx._id}
+                  className={cn(
+                    'p-4 rounded-xl border space-y-3 transition-all',
+                    isReturn ? 'border-amber-500/30 bg-amber-500/5' : 'border-purple-500/30 bg-purple-500/5'
+                  )}
+                >
+                  {/* Tx Header */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[rgb(var(--border))] pb-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase',
+                          isReturn ? 'bg-amber-500/20 text-amber-500' : 'bg-purple-500/20 text-purple-400'
+                        )}
+                      >
+                        {isReturn ? 'TRẢ HÀNG' : 'ĐỔI HÀNG'}
+                      </span>
+                      <span className="font-mono font-bold text-blue-400">{tx.transactionCode}</span>
+                    </div>
+                    <span className="text-[rgb(var(--muted-foreground))]">{formatDate(tx.createdAt || new Date())}</span>
+                  </div>
+
+                  {/* Item List */}
+                  {isReturn ? (
+                    <div className="space-y-2 text-xs">
+                      {(tx.returnedItems || []).map((item: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-[rgb(var(--card))] border border-[rgb(var(--border))]">
+                          <div>
+                            <p className="font-bold">{item.productName}</p>
+                            <p className="text-[10px] text-[rgb(var(--muted-foreground))]">
+                              Mã: {item.productCode} {item.serialNumber ? `• S/N: ${item.serialNumber}` : ''} • Tình trạng: <strong className="text-amber-400">{item.condition}</strong>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-[rgb(var(--foreground))]">Giá bán: {formatCurrency(item.originalSalePrice)}</p>
+                            <p className="text-[10px] text-emerald-500">Hoàn tiền: -{formatCurrency(item.refundAmount)}</p>
+                            {item.debtReduction > 0 && <p className="text-[10px] text-amber-500">Giảm nợ: -{formatCurrency(item.debtReduction)}</p>}
+                            <p className="text-[10px] text-blue-400 font-bold">Giữ lại: +{formatCurrency(item.retainedAmount)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 text-xs">
+                      {(tx.exchangedItems || []).map((item: any, i: number) => (
+                        <div key={i} className="p-3 rounded-lg bg-[rgb(var(--card))] border border-[rgb(var(--border))] space-y-2">
+
+                          <div className="flex items-center justify-between text-red-400">
+                            <span>Sản phẩm cũ trả: <strong>{item.oldProductName}</strong> ({item.oldProductCode}) {item.oldSerialNumber ? `• S/N: ${item.oldSerialNumber}` : ''}</span>
+                            <span className="font-bold">{formatCurrency(item.oldSalePrice)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-purple-400 pl-4 border-l-2 border-purple-500">
+                            <span>↓ Đổi sang: <strong>{item.newProductName}</strong> ({item.newProductCode}) {item.newSerialNumber ? `• S/N: ${item.newSerialNumber}` : ''}</span>
+                            <span className="font-bold">{formatCurrency(item.newSalePrice)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-[rgb(var(--muted-foreground))] border-t border-[rgb(var(--border))] pt-1">
+                            <span>Khách bù thêm: <strong className="text-emerald-500">{formatCurrency(item.customerPaidExtra)}</strong></span>
+                            <span>Cộng vào nợ: <strong className="text-amber-500">{formatCurrency(item.customerDebtAdded)}</strong></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Reason & Notes */}
+                  {tx.reason && (
+                    <div className="text-xs text-[rgb(var(--muted-foreground))] italic pt-1">
+                      Lý do: {tx.reason}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Return Exchange Modal */}
+      {showReturnExchangeModal && (
+        <ReturnExchangeModal
+          invoice={invoice}
+          onClose={() => setShowReturnExchangeModal(false)}
+          onSuccess={() => {
+            setShowReturnExchangeModal(false);
+            fetchInvoice();
+          }}
+        />
+      )}
 
       {/* Serial Selection Modal */}
       {activeItemIndex !== null && (
@@ -526,36 +662,23 @@ export function InvoiceDetail() {
                 <div className="p-8 text-center text-xs text-[rgb(var(--muted-foreground))]">
                   Đang tải danh sách Serial khả dụng từ kho...
                 </div>
-              ) : availableSerials.length === 0 ? (
-                <div className="p-8 text-center space-y-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                  <div className="text-xs text-amber-500 font-semibold">
-                    ⚠️ Không có Serial khả dụng cho sản phẩm này trong kho (Tình trạng yêu cầu: <strong>{invoice.items[activeItemIndex!]?.productSnapshot?.condition || 'Mới'}</strong>).
+              ) : availableSerials.filter((u) => Boolean(u.serialNumber)).length === 0 ? (
+                <div className="p-6 text-center space-y-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                  <div className="text-xs text-blue-600 font-bold">
+                    ℹ️ Sản phẩm này không đăng ký Serial trong kho (nhập kho không theo Serial).
                   </div>
-                  <p className="text-[11px] text-[rgb(var(--muted-foreground))]">
-                    Vui lòng tiến hành Nhập Hàng từ Nhà cung cấp để cập nhật dải Serial vào kho.
+                  <p className="text-[11px] text-[rgb(var(--muted-foreground))] leading-relaxed">
+                    Bạn không bắt buộc phải chọn Serial. Khi bấm <strong>CHỐT HÓA ĐƠN</strong>, hệ thống sẽ tự động trừ số lượng tồn kho khả dụng của sản phẩm này.
                   </p>
-                  <a
-                    href="/purchases/new"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 shadow-md shadow-emerald-500/20"
-                  >
-                    + Nhập Hàng Ngay
-                  </a>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="text-xs text-[rgb(var(--muted-foreground))] mb-2 flex items-center justify-between">
                     <span>Click vào Serial để chọn (Đã chọn: {selectedSerials.length}/{invoice.items[activeItemIndex!]?.quantity}):</span>
-                    <span className="text-[11px] font-semibold text-blue-500">
-                      Tình trạng cần chọn: {invoice.items[activeItemIndex!]?.productSnapshot?.condition || 'Mới'}
-                    </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {availableSerials.map((u) => {
                       const isSelected = selectedSerials.includes(u.serialNumber);
-                      const targetCond = invoice.items[activeItemIndex!]?.productSnapshot?.condition;
-                      const isCondMatch = !targetCond || u.condition === targetCond;
 
                       return (
                         <div
@@ -564,23 +687,15 @@ export function InvoiceDetail() {
                           className={`p-3 rounded-xl border cursor-pointer transition-all ${
                             isSelected
                               ? 'bg-blue-500/10 border-blue-500 text-blue-500 font-bold shadow-sm'
-                              : isCondMatch
-                              ? 'bg-[rgb(var(--background))] border-emerald-500/40 hover:border-emerald-500'
-                              : 'bg-[rgb(var(--background))] border-[rgb(var(--border))] opacity-75 hover:opacity-100'
+                              : 'bg-[rgb(var(--background))] border-[rgb(var(--border))] hover:border-blue-500'
                           }`}
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-mono text-sm">{u.serialNumber}</span>
-                            {isSelected ? (
-                              <Check className="w-4 h-4 text-blue-500" />
-                            ) : isCondMatch ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold">
-                                Khớp tình trạng
-                              </span>
-                            ) : null}
+                            {isSelected && <Check className="w-4 h-4 text-blue-500" />}
                           </div>
                           <div className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1 flex justify-between">
-                            <span className="font-semibold">Tình trạng: <strong className={isCondMatch ? 'text-emerald-500' : ''}>{u.condition}</strong></span>
+                            <span>NCC: {u.supplierName || 'N/A'}</span>
                             <span>BH NCC: {u.remainingWarrantyDays || 0}d</span>
                           </div>
                         </div>
@@ -816,7 +931,7 @@ function RecordPaymentModal({
 
           {paymentMethod === PaymentMethod.BANK_TRANSFER && (
             <div>
-              <label className="text-sm font-medium mb-1.5 block">Tên Ngân hàng</label>
+              <label className="text-sm font-medium mb-1.5 block font-medium">Tên Ngân hàng</label>
               <input
                 type="text"
                 value={bankName}

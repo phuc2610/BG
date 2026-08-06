@@ -23,6 +23,40 @@ export function Invoices() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
 
+  // Date Filter State
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'yesterday' | 'this_month' | 'last_month' | 'custom'>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  const handlePresetChange = (preset: 'all' | 'today' | 'yesterday' | 'this_month' | 'last_month' | 'custom') => {
+    setDatePreset(preset);
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    if (preset === 'today') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = yest.toISOString().split('T')[0];
+      setStartDate(yestStr);
+      setEndDate(yestStr);
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      setStartDate(firstDay);
+      setEndDate(todayStr);
+    } else if (preset === 'last_month') {
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+      setStartDate(firstDayLastMonth);
+      setEndDate(lastDayLastMonth);
+    } else if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
@@ -32,10 +66,12 @@ export function Invoices() {
       };
       if (search.trim()) params.search = search.trim();
       if (statusFilter) params.status = statusFilter;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
 
       const [res, statsRes] = await Promise.all([
         api.get('/invoices', { params }),
-        api.get('/invoices/stats'),
+        api.get('/invoices/stats', { params: { startDate, endDate } }),
       ]);
 
       setInvoices(res.data.data);
@@ -47,7 +83,7 @@ export function Invoices() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, search, statusFilter]);
+  }, [currentPage, search, statusFilter, startDate, endDate]);
 
   useEffect(() => {
     fetchInvoices();
@@ -116,7 +152,7 @@ export function Invoices() {
 
           <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Giá Trị TB / Đơn</span>
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Giá Trị TB / ĐƠN</span>
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
                 <DollarSign className="w-4 h-4" />
               </div>
@@ -127,34 +163,139 @@ export function Invoices() {
         </div>
       )}
 
-      {/* Filters Bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[280px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[rgb(var(--muted-foreground))]" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo Mã hóa đơn, Mã báo giá, Tên khách hàng, SĐT, Serial..."
-            className={cn(
-              'w-full pl-10 pr-4 py-2.5 rounded-xl text-sm',
-              'bg-[rgb(var(--muted))] border border-[rgb(var(--border))]',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50',
-              'transition-smooth'
-            )}
-          />
+      {/* Filters Bar & Date Filter Controls */}
+      <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap border-b border-[rgb(var(--border))] pb-3">
+          {/* Quick Date Presets */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-[rgb(var(--muted-foreground))] mr-1 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-blue-500" />
+              Lọc doanh thu:
+            </span>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('all')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'all'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Tất cả thời gian
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('today')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'today'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Hôm nay
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('yesterday')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'yesterday'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Hôm qua
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('this_month')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'this_month'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Tháng này
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('last_month')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'last_month'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Tháng trước
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetChange('custom')}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                datePreset === 'custom'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              Tùy chọn ngày
+            </button>
+          </div>
+
+          {/* Custom Date Pickers */}
+          {datePreset === 'custom' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[rgb(var(--muted-foreground))] font-medium">Từ ngày:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-xl bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+              />
+              <span className="text-[rgb(var(--muted-foreground))] font-medium">Đến ngày:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-xl bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+              />
+            </div>
+          )}
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2.5 rounded-xl text-sm bg-[rgb(var(--card))] border border-[rgb(var(--border))] focus:outline-none"
-        >
-          <option value="">Tất cả trạng thái</option>
-          {Object.values(InvoiceStatus).map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+        {/* Search & Status Filter */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-0 w-full sm:min-w-[240px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[rgb(var(--muted-foreground))]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm mã HĐ, tên khách, SĐT, Serial..."
+              className={cn(
+                'w-full pl-10 pr-4 py-2 rounded-xl text-sm',
+                'bg-[rgb(var(--background))] border border-[rgb(var(--border))]',
+                'focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50',
+                'transition-smooth'
+              )}
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] focus:outline-none w-full sm:w-auto"
+          >
+            <option value="">Tất cả trạng thái</option>
+            {Object.values(InvoiceStatus).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* DataTable List */}
@@ -277,9 +418,9 @@ export function Invoices() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-[rgb(var(--border))]">
+        <div className="flex items-center justify-between pt-4 border-t border-[rgb(var(--border))] flex-wrap gap-3">
           <p className="text-xs text-[rgb(var(--muted-foreground))]">
-            Trang {currentPage} / {totalPages} (Tổng {totalItems} hóa đơn)
+            Trang {currentPage} / {totalPages} ({totalItems} hóa đơn)
           </p>
           <div className="flex items-center gap-2">
             <button

@@ -24,8 +24,8 @@ class InvoiceService {
             throw new product_service_1.AppError('Hóa đơn không tồn tại', 404);
         return invoice;
     }
-    async getStats() {
-        return invoiceRepo.getStats();
+    async getStats(startDate, endDate) {
+        return invoiceRepo.getStats(startDate, endDate);
     }
     /**
      * Creates a new DRAFT Invoice by copying data from a confirmed Quote.
@@ -238,7 +238,8 @@ class InvoiceService {
     }
     /**
      * FINALIZES THE INVOICE (CHỐT HÓA ĐƠN).
-     * Validates serials, customer debt due date, and atomically converts InventoryUnits from RESERVED -> SOLD.
+     * Validates available stock count for items (with or without serials), customer debt due date,
+     * and converts InventoryUnits from AVAILABLE / RESERVED -> SOLD.
      * THIS IS THE ONLY POINT WHERE STOCK IS OFFICIALLY DEDUCTED.
      */
     async finalizeInvoice(invoiceId, data) {
@@ -246,29 +247,72 @@ class InvoiceService {
         if (invoice.isFinalized) {
             throw new product_service_1.AppError('Hóa đơn này đã được chốt trước đó rồi', 400);
         }
-        // 1. Validate Serials for all items
-        const allSelectedSerials = [];
+        const now = new Date();
+        const unitsToMarkSold = [];
+        const allExportedSerials = [];
+        // 1. Process each item: Ensure sufficient stock, assign available units (with or without serials)
         for (let i = 0; i < invoice.items.length; i++) {
             const item = invoice.items[i];
-            const selected = item.selectedSerials || [];
-            if (selected.length !== item.quantity) {
-                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot.name}): Yêu cầu chọn đúng ${item.quantity} Serial nhưng hiện mới chọn ${selected.length} Serial`, 400);
+            const requiredQty = item.quantity || 1;
+            const selectedSerials = (item.selectedSerials || []).filter((s) => s && s.trim());
+            let productId = item.productId || item.productSnapshot?.productId || item.productSnapshot?._id;
+            if (!productId && item.productSnapshot?.productCode) {
+                const prodDoc = await models_1.Product.findOne({ productCode: item.productSnapshot.productCode }).exec();
+                if (prodDoc)
+                    productId = prodDoc._id.toString();
             }
-            allSelectedSerials.push(...selected);
-        }
-        // 2. Validate Serials in DB are AVAILABLE or RESERVED by this invoice
-        const units = await models_1.InventoryUnit.find({ serialNumber: { $in: allSelectedSerials } }).exec();
-        if (units.length !== allSelectedSerials.length) {
-            throw new product_service_1.AppError('Một số Serial đã chọn không tồn tại trong kho', 400);
-        }
-        for (const u of units) {
-            if (u.status !== types_1.InventoryUnitStatus.AVAILABLE &&
-                u.status !== types_1.InventoryUnitStatus.RESERVED) {
-                throw new product_service_1.AppError(`Serial ${u.serialNumber} đã bị xuất bán hoặc không ở trạng thái sẵn sàng (Trạng thái: ${u.status})`, 400);
+            if (!productId) {
+                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không tìm thấy ID sản phẩm để xuất kho`, 400);
+            }
+            // Fetch all AVAILABLE or RESERVED units for this product in stock
+            const availableUnits = await models_1.InventoryUnit.find({
+                productId,
+                $or: [
+                    { status: types_1.InventoryUnitStatus.AVAILABLE },
+                    { reservedByInvoiceId: invoice._id },
+                ],
+            }).sort({ serialNumber: -1, createdAt: 1 }).exec();
+            if (availableUnits.length < requiredQty) {
+                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không đủ số lượng tồn kho khả dụng để xuất (Tồn khả dụng: ${availableUnits.length}, Yêu cầu: ${requiredQty})`, 400);
+            }
+            const chosenUnits = [];
+            // A. Match explicitly selected serial numbers first (if user picked specific serials in modal)
+            if (selectedSerials.length > 0) {
+                for (const sn of selectedSerials) {
+                    const match = availableUnits.find((u) => u.serialNumber === sn && !chosenUnits.some((c) => c._id.equals(u._id)));
+                    if (!match) {
+                        throw new product_service_1.AppError(`Serial ${sn} của sản phẩm ${item.productSnapshot?.name} không còn ở trạng thái sẵn sàng trong kho`, 400);
+                    }
+                    chosenUnits.push(match);
+                }
+            }
+            // B. Fill remaining quantity from unchosen available units in stock (whether they have serials or not)
+            const remainingNeeded = requiredQty - chosenUnits.length;
+            if (remainingNeeded > 0) {
+                const unchosenAvailable = availableUnits.filter((u) => !chosenUnits.some((c) => c._id.equals(u._id)));
+                const fillUnits = unchosenAvailable.slice(0, remainingNeeded);
+                chosenUnits.push(...fillUnits);
+            }
+            if (chosenUnits.length < requiredQty) {
+                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không tìm đủ đơn vị hàng khả dụng trong kho`, 400);
+            }
+            // Save chosen unit IDs and serial numbers
+            const itemSerials = [];
+            for (const u of chosenUnits) {
+                unitsToMarkSold.push(u._id);
+                if (u.serialNumber) {
+                    itemSerials.push(u.serialNumber);
+                    allExportedSerials.push(u.serialNumber);
+                }
+            }
+            item.selectedSerials = itemSerials;
+            if (itemSerials.length > 0) {
+                item.serialNumber = itemSerials.join(', ');
             }
         }
-        // Calculate actual totalCost & profit from physical serial purchase prices
-        const actualTotalCost = units.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+        // 2. Calculate actual cost price & profit from chosen physical units
+        const actualUnits = await models_1.InventoryUnit.find({ _id: { $in: unitsToMarkSold } }).exec();
+        const actualTotalCost = actualUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
         invoice.totalCost = actualTotalCost;
         invoice.profit = invoice.grandTotal - actualTotalCost;
         // 3. Customer payment & debt validation
@@ -283,7 +327,6 @@ class InvoiceService {
             throw new product_service_1.AppError('Khách hàng còn nợ tiền. Vui lòng chọn HẠN THANH TOÁN CÔNG NỢ KHÁCH HÀNG', 400);
         }
         // Set Finalized Status
-        const now = new Date();
         invoice.isDraft = false;
         invoice.isFinalized = true;
         invoice.finalizedAt = now;
@@ -298,21 +341,22 @@ class InvoiceService {
         }
         invoice.history.push({
             action: 'CHỐT_HÓA_ĐƠN',
-            description: `Xác nhận CHỐT HÓA ĐƠN ${invoice.invoiceCode}. Đã xuất kho ${allSelectedSerials.length} Serial`,
+            description: `Xác nhận CHỐT HÓA ĐƠN ${invoice.invoiceCode}. Đã xuất kho ${unitsToMarkSold.length} đơn vị sản phẩm${allExportedSerials.length > 0 ? ` (${allExportedSerials.length} Serial)` : ''}`,
             performedBy: 'Admin',
             createdAt: now,
         });
-        // 4. DB Session Transaction / Atomic Update
+        // 4. Update InventoryUnits to SOLD in DB
         const session = await mongoose_1.default.startSession();
         session.startTransaction();
         try {
-            // Mark InventoryUnits as SOLD
-            await models_1.InventoryUnit.updateMany({ serialNumber: { $in: allSelectedSerials } }, {
-                status: types_1.InventoryUnitStatus.SOLD,
-                soldInvoiceId: invoice._id,
-                soldInvoiceCode: invoice.invoiceCode,
-                soldAt: now,
-            }, { session });
+            if (unitsToMarkSold.length > 0) {
+                await models_1.InventoryUnit.updateMany({ _id: { $in: unitsToMarkSold } }, {
+                    status: types_1.InventoryUnitStatus.SOLD,
+                    soldInvoiceId: invoice._id,
+                    soldInvoiceCode: invoice.invoiceCode,
+                    soldAt: now,
+                }, { session });
+            }
             await invoice.save({ session });
             await session.commitTransaction();
         }
@@ -327,7 +371,7 @@ class InvoiceService {
         if (invoice.customerId) {
             await customerService.logActivity(invoice.customerId, {
                 action: 'CHỐT_HÓA_ĐƠN',
-                description: `Chốt hóa đơn bán hàng ${invoice.invoiceCode} (${allSelectedSerials.length} Serial)`,
+                description: `Chốt hóa đơn bán hàng ${invoice.invoiceCode} (${unitsToMarkSold.length} SP)`,
                 relatedInvoiceId: invoice._id,
                 relatedInvoiceCode: invoice.invoiceCode,
                 amount: invoice.grandTotal,

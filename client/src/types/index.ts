@@ -197,6 +197,83 @@ export interface InvoiceHistory {
   createdAt: string;
 }
 
+export enum ReturnItemCondition {
+  GOOD_RESTOCK = 'Tốt / nhập lại kho',
+  INSPECTION = 'Chờ kiểm tra',
+  WARRANTY = 'Lỗi / bảo hành',
+  DAMAGED = 'Hỏng / không nhập kho',
+}
+
+export enum ReturnExchangeType {
+  RETURN = 'RETURN',
+  EXCHANGE = 'EXCHANGE',
+}
+
+export interface IReturnItem {
+  order: number;
+  productId?: string;
+  productCode: string;
+  productName: string;
+  serialNumber?: string;
+  originalSalePrice: number;
+  originalCostPrice: number;
+  refundAmount: number;
+  debtReduction: number;
+  retainedAmount: number;
+  condition: ReturnItemCondition;
+  inventoryStatusTarget: string;
+  status: 'RETURNED';
+}
+
+export interface IExchangeItem {
+  order: number;
+  oldProductId?: string;
+  oldProductCode: string;
+  oldProductName: string;
+  oldSerialNumber?: string;
+  oldSalePrice: number;
+  oldCostPrice: number;
+  oldCondition: ReturnItemCondition;
+
+  newProductId: string;
+  newProductCode: string;
+  newProductName: string;
+  newSerialNumber?: string;
+  newSalePrice: number;
+  newCostPrice: number;
+
+  priceDifference: number;
+  customerPaidExtra: number;
+  customerDebtAdded: number;
+  cashRefund: number;
+  debtReduction: number;
+  retainedAmount: number;
+  status: 'EXCHANGED';
+}
+
+export interface IReturnExchangeTransaction {
+  _id?: string;
+  transactionCode: string;
+  invoiceId: string;
+  invoiceCode: string;
+  customerId?: string;
+  customerName: string;
+  type: ReturnExchangeType;
+  returnedItems: IReturnItem[];
+  exchangedItems: IExchangeItem[];
+  totalOriginalValue: number;
+  totalRefundAmount: number;
+  totalDebtReduction: number;
+  totalRetainedAmount: number;
+  totalCustomerPaidExtra: number;
+  totalCustomerDebtAdded: number;
+  profitAdjustment: number;
+  reason?: string;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
 export interface InvoiceItem {
   inventoryItem?: string;
   productId?: string;
@@ -210,7 +287,22 @@ export interface InvoiceItem {
   selectedSerials?: string[];
   total: number;
   order: number;
+  itemStatus?: 'SOLD' | 'RETURNED' | 'EXCHANGED';
+  returnExchangeTxId?: string;
+  returnedAt?: string;
+  refundAmount?: number;
+  retainedAmount?: number;
+  debtReduction?: number;
+  exchangedToItem?: {
+    productId: string;
+    productCode: string;
+    productName: string;
+    serialNumber?: string;
+    unitPrice: number;
+    costPrice: number;
+  };
 }
+
 
 export interface Quote {
   _id: string;
@@ -500,7 +592,8 @@ export interface PurchaseRecord {
   paidAmount: number;
   remainingAmount: number;
   dueDate?: string;
-  status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
+  isDraft?: boolean;
+  status: 'DRAFT' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'DUE_SOON' | 'OVERDUE';
   payments: SupplierPaymentRecord[];
   createdAt: string;
   updatedAt: string;
@@ -518,6 +611,7 @@ export interface InventoryUnitRecord {
   supplierName?: string;
   purchaseDate: string;
   purchasePrice: number;
+  listPrice?: number;
   condition: ProductCondition;
   supplierWarrantyMonths: number;
   supplierWarrantyStartDate: string;
@@ -547,6 +641,7 @@ export interface InventoryGroupedProduct {
   totalStock: number;
   latestCostPrice: number;
   totalStockValue: number;
+  totalStockListValue?: number;
 }
 
 export interface SupplierStats {
@@ -571,6 +666,7 @@ export interface UserAccount {
   _id: string;
   id?: string;
   username: string;
+  fullName?: string;
   role: 'ADMIN' | 'USER';
   status: 'PENDING' | 'ACTIVE' | 'BLOCKED';
   isActive: boolean;

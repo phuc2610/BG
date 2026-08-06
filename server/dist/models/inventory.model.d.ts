@@ -5,6 +5,7 @@ export interface IInventoryDocument extends Document {
     product: mongoose.Types.ObjectId;
     condition: ProductCondition;
     costPrice: number;
+    listPrice?: number;
     quantity: number;
     supplier?: string;
     supplierWarranty?: string;

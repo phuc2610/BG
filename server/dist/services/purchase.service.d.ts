@@ -15,15 +15,22 @@ export declare class PurchaseService {
         notes?: string;
         paidAmount?: number;
         dueDate?: Date;
+        isDraft?: boolean;
         items: Array<{
             productId: string;
             quantity: number;
             costPrice: number;
+            listPrice?: number;
             condition?: any;
             supplierWarrantyMonths?: number;
             serialsRaw?: string | string[];
         }>;
     }): Promise<import("../models").IPurchaseDocument>;
+    updateDraft(id: string, data: any): Promise<import("../models").IPurchaseDocument>;
+    updatePurchase(id: string, data: any): Promise<import("../models").IPurchaseDocument>;
+    deleteDraft(id: string): Promise<{
+        message: string;
+    }>;
     /**
      * Add a payment record to a purchase ticket to pay off supplier debt.
      */

@@ -4,6 +4,11 @@ import { InventoryUnitStatus, InventoryUnitFilterQuery, ProductCategory } from '
 export declare class InventoryUnitService {
     getAll(query: InventoryUnitFilterQuery): Promise<import("../types").PaginatedResponse<IInventoryUnitDocument>>;
     getById(id: string): Promise<IInventoryUnitDocument>;
+    updateListPrice(id: string, listPrice: number): Promise<mongoose.Document<unknown, {}, IInventoryUnitDocument, {}, {}> & IInventoryUnitDocument & Required<{
+        _id: mongoose.Types.ObjectId;
+    }> & {
+        __v: number;
+    }>;
     /**
      * Aggregates physical inventory grouped by PRODUCT (Master Catalog item).
      * Calculates Available stock count, Reserved count, Sold count, and Stock Value at purchase price.
@@ -24,7 +29,9 @@ export declare class InventoryUnitService {
         soldStock: number;
         totalStock: number;
         latestCostPrice: number;
+        latestListPrice: any;
         totalStockValue: number;
+        totalStockListValue: number;
     }[]>;
     /**
      * Aggregates physical inventory grouped by PRODUCT and CONDITION.
@@ -42,13 +49,14 @@ export declare class InventoryUnitService {
         productId: mongoose.Types.ObjectId;
         productCode: string;
         productName: string;
-        serialNumber: string;
+        serialNumber?: string;
         purchaseId?: mongoose.Types.ObjectId;
         purchaseCode?: string;
         supplierId?: mongoose.Types.ObjectId;
         supplierName?: string;
         purchaseDate: Date;
         purchasePrice: number;
+        listPrice?: number;
         condition: import("../types").ProductCondition;
         supplierWarrantyMonths: number;
         supplierWarrantyStartDate: Date;
@@ -59,6 +67,13 @@ export declare class InventoryUnitService {
         soldInvoiceId?: mongoose.Types.ObjectId;
         soldInvoiceCode?: string;
         soldAt?: Date;
+        history?: Array<{
+            action: string;
+            invoiceId?: mongoose.Types.ObjectId;
+            invoiceCode?: string;
+            note?: string;
+            date: Date;
+        }>;
         createdAt: Date;
         updatedAt: Date;
         _id: mongoose.Types.ObjectId;

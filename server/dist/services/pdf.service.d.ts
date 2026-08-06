@@ -41,5 +41,6 @@ export declare class PdfService {
      * BUILD HÓA ĐƠN BÁN HÀNG HTML
      */
     private buildInvoiceHtml;
+    private getCreatorDisplayName;
 }
 //# sourceMappingURL=pdf.service.d.ts.map
