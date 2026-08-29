@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
@@ -15,12 +15,29 @@ import {
   FileText,
   BookmarkPlus,
   RotateCcw,
+  Sparkles,
+  Loader2,
+  FileSpreadsheet,
+  Copy,
+  ShieldCheck,
+  Search,
+  Layers,
+  LayoutGrid,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Wand2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { ProductCondition, ProductCategory } from '@/types';
 import type { SupplierRecord } from '@/types';
-import { formatCurrency } from '@/lib/utils';
-import { ProductSearchSelect } from '@/components/shared/ProductSearchSelect';
+import { formatCurrency, cn } from '@/lib/utils';
+import { ProductAiImagePicker } from '@/components/shared/ProductAiImagePicker';
+import { SupplierSearchSelect } from '@/components/shared/SupplierSearchSelect';
+import { PurchaseItemRow, type PurchaseItemData } from '@/components/purchase/PurchaseItemRow';
+import { PurchaseExcelPasteModal } from '@/components/purchase/PurchaseExcelPasteModal';
+import { PurchaseBatchWarrantyModal } from '@/components/purchase/PurchaseBatchWarrantyModal';
+import { PurchaseBulkSerialModal } from '@/components/purchase/PurchaseBulkSerialModal';
 
 const NP_PURCHASE_DRAFT_KEY = 'np_purchase_draft_form_v1';
 
@@ -41,26 +58,13 @@ export function PurchaseForm() {
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [paidAmount, setPaidAmount] = useState<number>(0);
-  const [debtDays, setDebtDays] = useState<number>(30); // Số ngày nợ công nợ
-  const [dueMode, setDueMode] = useState<'days' | 'calendar'>('days'); // Chế độ nhập công nợ: 'days' (nhập số ngày) hoặc 'calendar' (chọn trên lịch)
+  const [debtDays, setDebtDays] = useState<number>(30);
+  const [dueMode, setDueMode] = useState<'days' | 'calendar'>('days');
   const [calendarDueDate, setCalendarDueDate] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
   // Items State
-  const [items, setItems] = useState<
-    Array<{
-      productId: string;
-      productName: string;
-      productCode: string;
-      quantity: number;
-      costPrice: number;
-      listPrice: number;
-      condition: ProductCondition;
-      supplierWarrantyValue: number;
-      supplierWarrantyUnit: 'day' | 'month' | 'year';
-      serialsRaw: string;
-    }>
-  >([
+  const [items, setItems] = useState<PurchaseItemData[]>([
     {
       productId: '',
       productName: '',
@@ -75,6 +79,15 @@ export function PurchaseForm() {
     },
   ]);
 
+  // UI Interactive States
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [searchItemText, setSearchItemText] = useState('');
+  const [filterTab, setFilterTab] = useState<'all' | 'uncompleted'>('all');
+  const [isCompact, setIsCompact] = useState(true);
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [showBatchWarrantyModal, setShowBatchWarrantyModal] = useState(false);
+  const [showBulkSerialModal, setShowBulkSerialModal] = useState(false);
+
   // Inline Quick Add Supplier Modal State
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
@@ -87,12 +100,14 @@ export function PurchaseForm() {
   const [targetItemIndex, setTargetItemIndex] = useState<number | null>(null);
   const [creatingProduct, setCreatingProduct] = useState(false);
   const [showAllSpecs, setShowAllSpecs] = useState(false);
+  const [suggestingQuickSpecs, setSuggestingQuickSpecs] = useState(false);
   const [newProdData, setNewProdData] = useState({
     name: '',
     category: ProductCategory.CPU,
     brand: '',
     model: '',
     description: '',
+    imageUrl: '',
     specs: {
       cpu: '',
       mainboard: '',
@@ -106,6 +121,40 @@ export function PurchaseForm() {
       notes: '',
     },
   });
+
+  const handleAiSuggestQuickSpecs = async () => {
+    if (!newProdData.name.trim()) {
+      toast.error('Vui lòng nhập Tên linh kiện trước khi yêu cầu Gemini gợi ý thông số!');
+      return;
+    }
+
+    setSuggestingQuickSpecs(true);
+    try {
+      const res = await api.post('/ai/suggest-specs', {
+        name: newProdData.name.trim(),
+        category: newProdData.category,
+      });
+      if (res.data.success && res.data.data) {
+        const d = res.data.data;
+        setNewProdData((prev) => ({
+          ...prev,
+          brand: d.brand || prev.brand,
+          model: d.model || prev.model,
+          description: d.description || prev.description,
+          specs: {
+            ...prev.specs,
+            ...(d.specs || {}),
+          },
+        }));
+        setShowAllSpecs(true);
+        toast.success('✨ Google Gemini đã tự động điền Thông số & Hãng!');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Lỗi gợi ý thông số từ Gemini');
+    } finally {
+      setSuggestingQuickSpecs(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -265,15 +314,12 @@ export function PurchaseForm() {
         const createdProd = res.data.data;
         toast.success(`Đã tạo mã sản phẩm mới: [${createdProd.productCode}] ${createdProd.name}`);
 
-        // Update local catalog list
         setProducts((prev) => [createdProd, ...prev]);
 
-        // Auto select for the active row if targetItemIndex is set
         if (targetItemIndex !== null && targetItemIndex >= 0 && targetItemIndex < items.length) {
           handleProductSelect(targetItemIndex, getPid(createdProd));
         }
 
-        // Close modal and reset form state
         setShowProductModal(false);
         setNewProdData({
           name: '',
@@ -281,8 +327,18 @@ export function PurchaseForm() {
           brand: '',
           model: '',
           description: '',
+          imageUrl: '',
           specs: {
-            cpu: '', mainboard: '', ram: '', ssd: '', hdd: '', vga: '', psu: '', case: '', cooler: '', notes: '',
+            cpu: '',
+            mainboard: '',
+            ram: '',
+            ssd: '',
+            hdd: '',
+            vga: '',
+            psu: '',
+            case: '',
+            cooler: '',
+            notes: '',
           },
         });
       }
@@ -293,7 +349,10 @@ export function PurchaseForm() {
     }
   };
 
-  const getPid = (p: any) => typeof p?._id === 'string' ? p._id : (p?._id?.toString() || p?.id || String(p?._id || ''));
+  const getPid = (p: any) =>
+    typeof p?._id === 'string'
+      ? p._id
+      : p?._id?.toString() || p?.id || String(p?._id || '');
 
   const handleProductSelect = (index: number, pId: string) => {
     const prod = products.find((p) => getPid(p) === pId);
@@ -304,6 +363,7 @@ export function PurchaseForm() {
         productId: getPid(prod),
         productName: prod.name,
         productCode: prod.productCode,
+        listPrice: prod.sellingPrice > 0 ? prod.sellingPrice : updated[index].listPrice,
       };
     } else {
       updated[index] = {
@@ -320,7 +380,6 @@ export function PurchaseForm() {
     const updated = [...items];
     const currentItem = updated[index];
 
-    // If costPrice is changed and listPrice was 0 or equal to old costPrice, auto update listPrice
     if (field === 'costPrice') {
       const numVal = Number(value) || 0;
       if (!currentItem.listPrice || currentItem.listPrice === currentItem.costPrice) {
@@ -335,8 +394,8 @@ export function PurchaseForm() {
   };
 
   const addItemRow = () => {
-    setItems([
-      ...items,
+    setItems((prev) => [
+      ...prev,
       {
         productId: '',
         productName: '',
@@ -354,12 +413,187 @@ export function PurchaseForm() {
 
   const removeItemRow = (index: number) => {
     if (items.length === 1) return;
-    setItems(items.filter((_, i) => i !== index));
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    setSelectedIndices((prev) => {
+      const next = new Set<number>();
+      prev.forEach((idx) => {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      });
+      return next;
+    });
   };
 
-  // Calculate totals
-  const totalAmount = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.costPrice) || 0), 0);
+  // Multi-select & Batch Actions
+  const handleSelectRow = (index: number, selected: boolean) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      const all = new Set(items.map((_, i) => i));
+      setSelectedIndices(all);
+    } else {
+      setSelectedIndices(new Set());
+    }
+  };
+
+  const handleDuplicateSelected = () => {
+    if (selectedIndices.size === 0) return;
+    const clones: PurchaseItemData[] = [];
+    items.forEach((it, idx) => {
+      if (selectedIndices.has(idx)) {
+        clones.push({
+          ...it,
+          serialsRaw: '', // Reset serials for duplicate rows
+        });
+      }
+    });
+    setItems((prev) => [...prev, ...clones]);
+    setSelectedIndices(new Set());
+    toast.success(`Đã nhân đôi ${clones.length} dòng linh kiện!`);
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIndices.size === 0) return;
+    if (items.length === selectedIndices.size) {
+      // Keep 1 empty row if deleting all
+      setItems([
+        {
+          productId: '',
+          productName: '',
+          productCode: '',
+          quantity: 1,
+          costPrice: 0,
+          listPrice: 0,
+          condition: ProductCondition.LIKE_NEW,
+          supplierWarrantyValue: 12,
+          supplierWarrantyUnit: 'month',
+          serialsRaw: '',
+        },
+      ]);
+    } else {
+      setItems((prev) => prev.filter((_, i) => !selectedIndices.has(i)));
+    }
+    setSelectedIndices(new Set());
+    toast.success('Đã xóa các dòng đã chọn!');
+  };
+
+  const handleApplyBatchWarranty = (value: number, unit: 'day' | 'month' | 'year') => {
+    if (selectedIndices.size === 0) return;
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (selectedIndices.has(idx)) {
+          return {
+            ...it,
+            supplierWarrantyValue: value,
+            supplierWarrantyUnit: unit,
+          };
+        }
+        return it;
+      })
+    );
+    toast.success(`Đã cập nhật bảo hành ${value} ${unit === 'month' ? 'tháng' : unit === 'year' ? 'năm' : 'ngày'} cho ${selectedIndices.size} dòng!`);
+  };
+
+  const handleImportExcelRows = (imported: PurchaseItemData[]) => {
+    // If the first row is empty, replace it, otherwise append
+    if (items.length === 1 && !items[0].productId && !items[0].costPrice) {
+      setItems(imported);
+    } else {
+      setItems((prev) => [...prev, ...imported]);
+    }
+    toast.success(`Đã nhập thành công ${imported.length} dòng từ Excel!`);
+  };
+
+  // Global serial tracking across all rows to detect cross-row duplicates
+  const globalSerialMap = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((it) => {
+      const serials = (it.serialsRaw || '')
+        .split(/[\n,;\t]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s.length > 0);
+      serials.forEach((sn) => {
+        map.set(sn, (map.get(sn) || 0) + 1);
+      });
+    });
+    return map;
+  }, [items]);
+
+  // Validation helper for each item
+  const checkItemUncompleted = (it: PurchaseItemData) => {
+    if (!it.productId) return true;
+    if (Number(it.quantity) <= 0) return true;
+    const serialList = (it.serialsRaw || '')
+      .split(/[\n,;\t]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (serialList.length > 0 && serialList.length !== Number(it.quantity)) return true;
+
+    // Check for internal duplicates
+    const set = new Set(serialList.map((s) => s.toLowerCase()));
+    if (set.size !== serialList.length) return true;
+
+    // Check for cross-row duplicates
+    for (const sn of serialList) {
+      if ((globalSerialMap.get(sn.toLowerCase()) || 0) > 1) return true;
+    }
+
+    return false;
+  };
+
+  // Calculate totals and uncompleted counts
+  const totalAmount = useMemo(
+    () => items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.costPrice) || 0), 0),
+    [items]
+  );
+  const totalQuantity = useMemo(
+    () => items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0),
+    [items]
+  );
+  const totalSerials = useMemo(() => {
+    return items.reduce((sum, it) => {
+      const count = (it.serialsRaw || '')
+        .split(/[\n,;\t]+/)
+        .filter((s) => s.trim().length > 0).length;
+      return sum + count;
+    }, 0);
+  }, [items]);
+
+  const uncompletedCount = useMemo(() => {
+    return items.filter(checkItemUncompleted).length;
+  }, [items, globalSerialMap]);
+
   const remainingDebt = Math.max(0, totalAmount - (Number(paidAmount) || 0));
+
+  // Filtered items based on search and tab
+  const visibleItems = useMemo(() => {
+    return items
+      .map((item, originalIndex) => ({ item, originalIndex }))
+      .filter(({ item }) => {
+        // Tab filter
+        if (filterTab === 'uncompleted' && !checkItemUncompleted(item)) {
+          return false;
+        }
+
+        // Search text filter
+        if (searchItemText.trim()) {
+          const term = searchItemText.toLowerCase().trim();
+          const code = (item.productCode || '').toLowerCase();
+          const name = (item.productName || '').toLowerCase();
+          const serials = (item.serialsRaw || '').toLowerCase();
+          return code.includes(term) || name.includes(term) || serials.includes(term);
+        }
+
+        return true;
+      });
+  }, [items, filterTab, searchItemText, globalSerialMap]);
 
   const handleSubmitForm = async (saveAsDraft: boolean) => {
     if (!supplierId) {
@@ -376,24 +610,29 @@ export function PurchaseForm() {
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it.productId) {
+          setFilterTab('uncompleted');
           toast.error(`Mục ${i + 1}: Vui lòng chọn sản phẩm`);
+          document.getElementById(`purchase-item-row-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
         if (it.quantity <= 0) {
+          setFilterTab('uncompleted');
           toast.error(`Mục ${i + 1}: Số lượng phải lớn hơn 0`);
+          document.getElementById(`purchase-item-row-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
 
-        // Validate serial count only if serials were entered
         const serialList = (it.serialsRaw || '')
           .split(/[\n,;\t]+/)
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 
         if (serialList.length > 0 && serialList.length !== Number(it.quantity)) {
+          setFilterTab('uncompleted');
           toast.error(
-            `Mục ${i + 1} (${it.productName || 'Sản phẩm'}): Đã nhập ${serialList.length} Serial nhưng số lượng là ${it.quantity}. Vui lòng kiểm tra lại hoặc xóa hết Serial!`
+            `Mục ${i + 1} (${it.productName || 'Sản phẩm'}): Đã nhập ${serialList.length} Serial nhưng số lượng là ${it.quantity}. Vui lòng kiểm tra lại!`
           );
+          document.getElementById(`purchase-item-row-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
       }
@@ -466,30 +705,47 @@ export function PurchaseForm() {
     );
   }
 
+  const isAllVisibleSelected =
+    visibleItems.length > 0 && visibleItems.every(({ originalIndex }) => selectedIndices.has(originalIndex));
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Top Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate('/purchases')}
-          className="p-2.5 rounded-xl border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[rgb(var(--foreground))]">
-            Tạo Phiếu Nhập Hàng Mới
-          </h1>
-          <p className="text-sm text-[rgb(var(--muted-foreground))] mt-0.5">
-            Nhập linh kiện vật lý theo Serial Number từ Nhà cung cấp
-          </p>
+    <div className="space-y-6 max-w-7xl mx-auto pb-24">
+      {/* Top Navigation Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('/purchases')}
+            className="p-2.5 rounded-xl border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[rgb(var(--foreground))]">
+              {id ? 'Chỉnh Sửa Phiếu Nhập Hàng' : 'Tạo Phiếu Nhập Hàng Mới'}
+            </h1>
+            <p className="text-sm text-[rgb(var(--muted-foreground))] mt-0.5">
+              Nhập linh kiện vật lý theo Serial Number từ Nhà cung cấp
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => saveDraft(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[rgb(var(--card))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Lưu bản nháp để tiếp tục sau"
+          >
+            <BookmarkPlus className="w-4 h-4 text-amber-400" />
+            <span>Lưu Nháp</span>
+          </button>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Draft Recovery Banner */}
         {hasDraft && (
-          <div className="mb-6 p-4 rounded-2xl border border-blue-500/30 bg-blue-500/10 flex items-center justify-between flex-wrap gap-3 animate-in fade-in-50">
+          <div className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/10 flex items-center justify-between flex-wrap gap-3 animate-in fade-in-50">
             <div className="flex items-center gap-3">
               <BookmarkPlus className="w-5 h-5 text-blue-500 shrink-0" />
               <div>
@@ -508,21 +764,21 @@ export function PurchaseForm() {
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-500 text-white hover:bg-blue-600 shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Khôi Phục Bản Nháp</span>
+                <span>Khôi Phục Nháp</span>
               </button>
               <button
                 type="button"
                 onClick={clearDraft}
-                className="px-3 py-1.5 rounded-xl text-xs font-medium bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]"
+                className="px-3 py-1.5 rounded-xl text-xs font-medium text-[rgb(var(--muted-foreground))] hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
-                Xóa Nháp
+                Bỏ Qua
               </button>
             </div>
           </div>
         )}
 
-        {/* Supplier & General Info Section */}
-        <div className="p-6 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-4">
+        {/* Supplier & General Information Section */}
+        <div className="p-6 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-4 relative z-30">
           <div className="flex items-center justify-between border-b border-[rgb(var(--border))] pb-3">
             <h3 className="font-bold text-base text-[rgb(var(--foreground))] flex items-center gap-2">
               <Building2 className="w-5 h-5 text-blue-500" />
@@ -531,7 +787,7 @@ export function PurchaseForm() {
             <button
               type="button"
               onClick={() => setShowSupplierModal(true)}
-              className="text-xs font-semibold text-blue-500 hover:text-blue-600 flex items-center gap-1"
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
             >
               <Plus className="w-4 h-4" />
               <span>Thêm NCC Mới</span>
@@ -543,19 +799,13 @@ export function PurchaseForm() {
               <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
                 Chọn Nhà Cung Cấp <span className="text-red-500">*</span>
               </label>
-              <select
-                required
+              <SupplierSearchSelect
+                suppliers={suppliers}
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-              >
-                <option value="">-- Chọn Nhà cung cấp từ danh sách --</option>
-                {suppliers.map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.supplierCode} - {s.name} {s.phone ? `(${s.phone})` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setSupplierId}
+                onAddNew={() => setShowSupplierModal(true)}
+                required
+              />
             </div>
 
             <div>
@@ -586,229 +836,278 @@ export function PurchaseForm() {
           </div>
         </div>
 
-        {/* Products & Serials Section */}
-        <div className="p-6 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-[rgb(var(--border))] pb-3">
-            <h3 className="font-bold text-base text-[rgb(var(--foreground))] flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-500" />
-              Danh Sách Sản Phẩm & Serial Hàng Nhập
-            </h3>
-            <div className="flex items-center gap-2">
+        {/* Refactored Products & Serials Section */}
+        <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm flex flex-col relative">
+          {/* Section Toolbar Header */}
+          <div className="p-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/20] rounded-t-2xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-base text-[rgb(var(--foreground))]">
+                  Danh Sách Sản Phẩm & Serial
+                </h3>
+              </div>
+
+              {/* Segmented Filter Control: All / Uncompleted */}
+              <div className="flex items-center p-0.5 rounded-xl bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('all')}
+                  className={cn(
+                    'px-3 py-1 rounded-lg transition-all flex items-center gap-1.5',
+                    filterTab === 'all'
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                      : 'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+                  )}
+                >
+                  <span>Tất cả</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 font-mono">
+                    {items.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('uncompleted')}
+                  className={cn(
+                    'px-3 py-1 rounded-lg transition-all flex items-center gap-1.5',
+                    filterTab === 'uncompleted'
+                      ? 'bg-amber-600 text-white shadow-sm font-bold'
+                      : 'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+                  )}
+                >
+                  <span>Chưa xong</span>
+                  {uncompletedCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-red-500 text-white font-mono font-bold animate-pulse">
+                      {uncompletedCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Density Toggle (Thoáng / Gọn) */}
               <button
                 type="button"
-                onClick={() => {
-                  setTargetItemIndex(items.length - 1);
-                  setShowProductModal(true);
-                }}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 flex items-center gap-1 transition-colors border border-indigo-500/20"
+                onClick={() => setIsCompact(!isCompact)}
+                className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hidden sm:flex items-center gap-1 transition-colors"
+                title="Chuyển đổi mật độ dòng hiển thị"
               >
-                <Plus className="w-4 h-4" />
-                <span>Tạo Mã Sản Phẩm Mới</span>
+                <Layers className="w-3.5 h-3.5" />
+                <span>{isCompact ? 'Gọn' : 'Thoáng'}</span>
               </button>
-              <button
-                type="button"
-                onClick={addItemRow}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 flex items-center gap-1 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Thêm Dòng Linh Kiện</span>
-              </button>
+            </div>
+
+            {/* Top Right Action Buttons */}
+            <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end flex-wrap">
+              {/* Search within items list */}
+              <div className="relative flex-1 sm:w-56">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--muted-foreground))]" />
+                <input
+                  type="text"
+                  placeholder="Lọc trong phiếu..."
+                  value={searchItemText}
+                  onChange={(e) => setSearchItemText(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl text-xs bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] focus:outline-none focus:border-indigo-500"
+                />
+                {searchItemText && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchItemText('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkSerialModal(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Sinh số Serial tự động hàng loạt cho các dòng linh kiện"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Sinh SN Hàng Loạt</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowExcelModal(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Dán nhanh nhiều dòng từ Excel hoặc Google Sheets"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Dán từ Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetItemIndex(items.length - 1);
+                    setShowProductModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tạo Mã Catalog</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={addItemRow}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-1 transition-colors shadow-md shadow-blue-500/20"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm Dòng</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-6 divide-y divide-[rgb(var(--border))]">
-            {items.map((it, idx) => (
-              <div key={idx} className={`${idx > 0 ? 'pt-6' : ''} space-y-4`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">
-                    # Mục {idx + 1}
-                  </span>
-                  {items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItemRow(idx)}
-                      className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
-                      title="Xóa mục này"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <div className="sm:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-semibold text-[rgb(var(--foreground))]">
-                        Mã Sản Phẩm / Tên Sản Phẩm <span className="text-red-500">*</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetItemIndex(idx);
-                          setShowProductModal(true);
-                        }}
-                        className="text-xs font-bold text-indigo-500 hover:text-indigo-600 flex items-center gap-1 hover:underline"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>+ Tạo mã mới</span>
-                      </button>
-                    </div>
-                    <ProductSearchSelect
-                      required
-                      products={products}
-                      value={it.productId}
-                      onChange={(pId) => handleProductSelect(idx, pId)}
-                      onAddNew={() => {
-                        setTargetItemIndex(idx);
-                        setShowProductModal(true);
-                      }}
-                      placeholder="-- Gõ từ khóa tìm hoặc chọn sản phẩm --"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                      Số Lượng Nhập <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      required
-                      value={it.quantity}
-                      onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                      Giá Nhập / Cái (₫) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      required
-                      value={it.costPrice}
-                      onChange={(e) => handleItemChange(idx, 'costPrice', Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-emerald-500 mb-1">
-                      Giá Niêm Yết / Bán (₫)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={it.listPrice ?? it.costPrice}
-                      onChange={(e) => handleItemChange(idx, 'listPrice', Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl text-sm font-semibold bg-[rgb(var(--background))] border border-emerald-500/30 text-emerald-500 focus:border-emerald-500"
-                      placeholder="Giá niêm yết bán..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                      Bảo Hành Từ NCC (Số lượng hoặc Chọn Lịch)
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={0}
-                        value={it.supplierWarrantyValue ?? 12}
-                        onChange={(e) => handleItemChange(idx, 'supplierWarrantyValue', Number(e.target.value))}
-                        className="w-20 px-3 py-2 rounded-xl text-sm font-semibold bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                      />
-                      <select
-                        value={it.supplierWarrantyUnit || 'month'}
-                        onChange={(e) => handleItemChange(idx, 'supplierWarrantyUnit', e.target.value)}
-                        className="px-2.5 py-2 rounded-xl text-sm font-semibold bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                      >
-                        <option value="day">Ngày</option>
-                        <option value="month">Tháng</option>
-                        <option value="year">Năm</option>
-                      </select>
-                      <input
-                        type="date"
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            const pDate = new Date(purchaseDate).getTime();
-                            const wDate = new Date(e.target.value).getTime();
-                            const diffDays = Math.max(1, Math.round((wDate - pDate) / (1000 * 3600 * 24)));
-                            const updated = [...items];
-                            updated[idx] = {
-                              ...updated[idx],
-                              supplierWarrantyValue: diffDays,
-                              supplierWarrantyUnit: 'day',
-                            };
-                            setItems(updated);
-                          }
-                        }}
-                        title="Chọn ngày hết hạn bảo hành trên Lịch"
-                        className="w-9 h-9 p-1.5 rounded-xl bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] cursor-pointer shrink-0"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="sm:col-span-2 flex items-center justify-end font-bold text-sm text-[rgb(var(--foreground))]">
-                    Thành tiền: {formatCurrency((it.quantity || 0) * (it.costPrice || 0))}
-                  </div>
-                </div>
-
-                {/* Bulk Serial Paste Area */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-indigo-500">
-                      Danh Sách Serial Number ({it.quantity} mã){' '}
-                      <span className="text-[rgb(var(--muted-foreground))] font-normal">(Tùy chọn — không bắt buộc)</span>
-                    </label>
-                    <span className="text-[11px] text-[rgb(var(--muted-foreground))]">
-                      Cho phép paste nhiều Serial (mỗi Serial một dòng)
-                    </span>
-                  </div>
-                  <textarea
-                    rows={4}
-                    placeholder={`Không bắt buộc — Paste danh sách Serial tại đây...\nVí dụ:\nSN001\nSN002\nSN003`}
-                    value={it.serialsRaw}
-                    onChange={(e) => handleItemChange(idx, 'serialsRaw', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs font-mono bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <div className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">
-                    Số Serial đã nhập:{' '}
-                    <span className={`font-bold ${
-                      (() => {
-                        const count = (it.serialsRaw || '').split(/[\n,;\t]+/).filter((s) => s.trim().length > 0).length;
-                        return count === 0 ? 'text-[rgb(var(--muted-foreground))]' : count === it.quantity ? 'text-emerald-500' : 'text-amber-500';
-                      })()
-                    }`}>
-                      {(it.serialsRaw || '').split(/[\n,;\t]+/).filter((s) => s.trim().length > 0).length}
-                    </span>{' '}
-                    / {it.quantity}
-                    {(() => {
-                      const count = (it.serialsRaw || '').split(/[\n,;\t]+/).filter((s) => s.trim().length > 0).length;
-                      if (count === 0) return <span className="ml-2 italic">(Nhập kho không có Serial)</span>;
-                      if (count === it.quantity) return <span className="ml-2 text-emerald-500">✓ Khớp số lượng</span>;
-                      return <span className="ml-2 text-amber-500">⚠ Chưa khớp — cần {it.quantity} serial</span>;
-                    })()}
-                  </div>
-                </div>
+          {/* Floating Batch Actions Bar (Visible when rows are selected) */}
+          {selectedIndices.size > 0 && (
+            <div className="px-4 py-2.5 bg-indigo-600/15 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2 text-xs animate-in fade-in-50">
+              <div className="flex items-center gap-2 font-bold text-indigo-300">
+                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                <span>Đã chọn {selectedIndices.size} dòng</span>
               </div>
-            ))}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkSerialModal(true)}
+                  className="px-3 py-1 rounded-lg font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1 transition-colors shadow-sm"
+                >
+                  <Wand2 className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Sinh SN ({selectedIndices.size})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDuplicateSelected}
+                  className="px-3 py-1 rounded-lg font-bold bg-[rgb(var(--card))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] flex items-center gap-1 transition-colors shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Nhân đôi ({selectedIndices.size})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBatchWarrantyModal(true)}
+                  className="px-3 py-1 rounded-lg font-bold bg-[rgb(var(--card))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] flex items-center gap-1 transition-colors shadow-sm"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Đặt bảo hành hàng loạt</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  className="px-3 py-1 rounded-lg font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa đã chọn ({selectedIndices.size})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedIndices(new Set())}
+                  className="p-1 rounded-lg text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]"
+                  title="Bỏ chọn tất cả"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sticky Desktop Table Header (>= 820px) */}
+          <div className="hidden md:grid grid-cols-[32px_32px_minmax(220px,1fr)_75px_120px_120px_125px_120px_90px_36px] items-center gap-2 px-3.5 py-2.5 bg-[rgb(var(--muted))/40] text-[rgb(var(--muted-foreground))] font-bold text-xs sticky top-0 z-20 border-b border-[rgb(var(--border))] select-none">
+            {/* Checkbox Header */}
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                checked={isAllVisibleSelected}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                title="Chọn tất cả các dòng đang hiển thị"
+              />
+            </div>
+
+            <div className="text-center">STT</div>
+            <div>Sản Phẩm & Linh Kiện</div>
+            <div className="text-center">Số Lượng</div>
+            <div className="text-right">Giá Nhập (₫)</div>
+            <div className="text-right">Giá Niêm Yết (₫)</div>
+            <div className="text-center">Bảo Hành NCC</div>
+            <div className="text-right">Thành Tiền</div>
+            <div className="text-center">Serial</div>
+            <div className="text-center">Xóa</div>
+          </div>
+
+          {/* Table Body / Rows List */}
+          <div className="divide-y divide-[rgb(var(--border))]">
+            {visibleItems.length === 0 ? (
+              <div className="p-12 text-center text-xs text-[rgb(var(--muted-foreground))] space-y-2">
+                <Package className="w-8 h-8 mx-auto opacity-30" />
+                <p>
+                  {filterTab === 'uncompleted'
+                    ? '🎉 Tuyệt vời! Tất cả các dòng sản phẩm đã hoàn thành đầy đủ thông tin.'
+                    : 'Không tìm thấy dòng sản phẩm nào khớp với tìm kiếm.'}
+                </p>
+                {filterTab === 'uncompleted' && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('all')}
+                    className="text-indigo-400 font-bold hover:underline"
+                  >
+                    Xem toàn bộ danh sách ({items.length})
+                  </button>
+                )}
+              </div>
+            ) : (
+              visibleItems.map(({ item, originalIndex }) => (
+                <PurchaseItemRow
+                  key={originalIndex}
+                  index={originalIndex}
+                  item={item}
+                  products={products}
+                  isSelected={selectedIndices.has(originalIndex)}
+                  isCompact={isCompact}
+                  canRemove={items.length > 1}
+                  purchaseDate={purchaseDate}
+                  globalSerialSet={globalSerialMap}
+                  onSelectRow={(selected) => handleSelectRow(originalIndex, selected)}
+                  onChangeField={(field, val) => handleItemChange(originalIndex, field, val)}
+                  onSelectProduct={(pId) => handleProductSelect(originalIndex, pId)}
+                  onRemove={() => removeItemRow(originalIndex)}
+                  onOpenProductModal={() => {
+                    setTargetItemIndex(originalIndex);
+                    setShowProductModal(true);
+                  }}
+                  onEnterPressAtEnd={() => {
+                    if (originalIndex === items.length - 1) {
+                      addItemRow();
+                    }
+                  }}
+                />
+              ))
+            )}
           </div>
         </div>
 
         {/* Payment & Supplier Debt Section */}
         <div className="p-6 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-4">
           <h3 className="font-bold text-base text-[rgb(var(--foreground))] flex items-center gap-2 border-b border-[rgb(var(--border))] pb-3">
-            <DollarSign className="w-5 h-5 text-emerald-500" />
+            <DollarSign className="w-5 h-5 text-emerald-400" />
             Thanh Toán Cho Nhà Cung Cấp & Công Nợ
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 rounded-xl bg-[rgb(var(--muted))/30] space-y-1">
               <div className="text-xs text-[rgb(var(--muted-foreground))]">Tổng Giá Trị Phiếu Nhập:</div>
-              <div className="text-xl font-bold text-[rgb(var(--foreground))]">
+              <div className="text-xl font-bold font-mono text-[rgb(var(--foreground))]">
                 {formatCurrency(totalAmount)}
               </div>
             </div>
@@ -821,9 +1120,10 @@ export function PurchaseForm() {
                 type="number"
                 min={0}
                 max={totalAmount}
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(Number(e.target.value))}
-                className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-emerald-500"
+                value={paidAmount === 0 ? '' : paidAmount}
+                onChange={(e) => setPaidAmount(Number(e.target.value) || 0)}
+                placeholder="0"
+                className="w-full px-3 py-2.5 rounded-xl text-sm font-bold font-mono bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-emerald-400 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
@@ -831,7 +1131,7 @@ export function PurchaseForm() {
               <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
                 Còn Nợ NCC (Tự động tính)
               </label>
-              <div className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-[rgb(var(--muted))/30] text-amber-500">
+              <div className="w-full px-3 py-2.5 rounded-xl text-sm font-bold font-mono bg-[rgb(var(--muted))/30] text-amber-400">
                 {formatCurrency(remainingDebt)}
               </div>
             </div>
@@ -840,12 +1140,11 @@ export function PurchaseForm() {
           {remainingDebt > 0 && (
             <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-500 uppercase tracking-wide">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wide">
                   <AlertCircle className="w-4 h-4" />
                   Thời Hạn Thanh Toán Công Nợ NCC
                 </div>
 
-                {/* Dual Mode Switcher Tabs */}
                 <div className="flex items-center p-0.5 rounded-xl bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-xs">
                   <button
                     type="button"
@@ -883,13 +1182,12 @@ export function PurchaseForm() {
                         required={remainingDebt > 0}
                         value={debtDays}
                         onChange={(e) => setDebtDays(Math.max(1, Number(e.target.value)))}
-                        className="w-24 px-3 py-2 rounded-xl text-sm font-bold bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-amber-500 focus:outline-none focus:border-amber-500"
+                        className="w-24 px-3 py-2 rounded-xl text-sm font-bold font-mono bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-amber-400 focus:outline-none focus:border-amber-500 text-center"
                         placeholder="Số ngày..."
                       />
                       <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))]">ngày</span>
                     </div>
 
-                    {/* Quick Preset Buttons */}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {[7, 15, 30, 45, 60, 90].map((d) => (
                         <button
@@ -909,7 +1207,7 @@ export function PurchaseForm() {
                   </div>
 
                   <div className="text-xs text-[rgb(var(--muted-foreground))] font-medium pt-1">
-                    🗓️ Hạn thanh toán công nợ: <strong className="text-amber-500 font-bold">{new Date(new Date(purchaseDate).getTime() + (Number(debtDays) || 0) * 86400000).toLocaleDateString('vi-VN')}</strong> (Tự động cộng <span className="underline">{debtDays || 0} ngày</span> từ Ngày nhập hàng <span className="underline">{new Date(purchaseDate).toLocaleDateString('vi-VN')}</span>)
+                    🗓️ Hạn thanh toán công nợ: <strong className="text-amber-400 font-bold">{new Date(new Date(purchaseDate).getTime() + (Number(debtDays) || 0) * 86400000).toLocaleDateString('vi-VN')}</strong> (Tự động cộng <span className="underline">{debtDays || 0} ngày</span> từ Ngày nhập hàng <span className="underline">{new Date(purchaseDate).toLocaleDateString('vi-VN')}</span>)
                   </div>
                 </div>
               ) : (
@@ -926,7 +1224,7 @@ export function PurchaseForm() {
                   </div>
                   {calendarDueDate && (
                     <div className="text-xs text-[rgb(var(--muted-foreground))] font-medium">
-                      🗓️ Hạn chót đã chọn: <strong className="text-amber-500 font-bold">{new Date(calendarDueDate).toLocaleDateString('vi-VN')}</strong>
+                      🗓️ Hạn chót đã chọn: <strong className="text-amber-400 font-bold">{new Date(calendarDueDate).toLocaleDateString('vi-VN')}</strong>
                     </div>
                   )}
                 </div>
@@ -935,34 +1233,80 @@ export function PurchaseForm() {
           )}
         </div>
 
-        {/* Submit Actions */}
-        <div className="flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/purchases')}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]"
-          >
-            Hủy Bỏ
-          </button>
+        {/* Sticky Summary Footer Bar (Dính Đáy Form) */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[rgb(var(--card))/95] backdrop-blur-md border-t border-[rgb(var(--border))] shadow-2xl px-4 py-3 animate-in fade-in-50">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+            {/* Left Metrics & Warnings */}
+            <div className="flex items-center gap-3 flex-wrap text-xs">
+              <div className="flex items-center gap-2 bg-[rgb(var(--muted))/40] px-3 py-1.5 rounded-xl border border-[rgb(var(--border))]">
+                <span className="text-[rgb(var(--muted-foreground))]">Tổng dòng:</span>
+                <span className="font-bold font-mono text-[rgb(var(--foreground))]">{items.length}</span>
+              </div>
 
-          <button
-            type="button"
-            onClick={() => handleSubmitForm(true)}
-            disabled={submitting}
-            className="px-5 py-2.5 rounded-xl text-sm font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30 hover:bg-amber-500/20 flex items-center gap-1.5 transition-colors disabled:opacity-50"
-            title="Lưu tạm phiếu nhập để chỉnh sửa tiếp bất kỳ lúc nào"
-          >
-            <BookmarkPlus className="w-4 h-4" />
-            <span>Lưu Tạm Phiếu Nhập</span>
-          </button>
+              <div className="flex items-center gap-2 bg-[rgb(var(--muted))/40] px-3 py-1.5 rounded-xl border border-[rgb(var(--border))]">
+                <span className="text-[rgb(var(--muted-foreground))]">Tổng SL:</span>
+                <span className="font-bold font-mono text-blue-400">{totalQuantity}</span>
+              </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50"
-          >
-            {submitting ? 'Đang lưu...' : id ? 'Xác Nhận Duyệt & Nhập Kho' : 'Xác Nhận Tạo Phiếu Nhập Hàng'}
-          </button>
+              <div className="flex items-center gap-2 bg-[rgb(var(--muted))/40] px-3 py-1.5 rounded-xl border border-[rgb(var(--border))]">
+                <span className="text-[rgb(var(--muted-foreground))]">Serial đã nhập:</span>
+                <span className="font-bold font-mono text-indigo-400">{totalSerials}/{totalQuantity}</span>
+              </div>
+
+              <div className="flex items-center gap-2 bg-[rgb(var(--muted))/40] px-3 py-1.5 rounded-xl border border-[rgb(var(--border))]">
+                <span className="text-[rgb(var(--muted-foreground))]">Tổng tiền:</span>
+                <span className="font-bold font-mono text-emerald-400 text-sm">{formatCurrency(totalAmount)}</span>
+              </div>
+
+              {uncompletedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterTab('uncompleted');
+                    const firstErrorIdx = items.findIndex(checkItemUncompleted);
+                    if (firstErrorIdx !== -1) {
+                      document.getElementById(`purchase-item-row-${firstErrorIdx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors animate-pulse"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>{uncompletedCount} dòng chưa xong</span>
+                </button>
+              )}
+            </div>
+
+            {/* Right Submit Buttons */}
+            <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/purchases')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))] transition-colors"
+              >
+                Hủy Bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSubmitForm(true)}
+                disabled={submitting}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                title="Lưu tạm phiếu nhập để chỉnh sửa tiếp bất kỳ lúc nào"
+              >
+                <BookmarkPlus className="w-4 h-4" />
+                <span>Lưu Tạm</span>
+              </button>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-indigo-500 transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{submitting ? 'Đang lưu...' : id ? 'Xác Nhận Duyệt & Nhập Kho' : 'Xác Nhận Tạo Phiếu Nhập Hàng'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </form>
 
@@ -1046,11 +1390,11 @@ export function PurchaseForm() {
           </div>
         </div>
       )}
+
       {/* Inline Quick Add Master Product Modal */}
       {showProductModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl w-full max-w-2xl my-8 overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/30] shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
@@ -1074,12 +1418,26 @@ export function PurchaseForm() {
               </button>
             </div>
 
-            {/* Modal Form */}
             <form onSubmit={handleQuickAddProduct} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                  Tên Linh Kiện / Sản Phẩm *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))]">
+                    Tên Linh Kiện / Sản Phẩm *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAiSuggestQuickSpecs}
+                    disabled={suggestingQuickSpecs}
+                    className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center gap-1 transition-colors disabled:opacity-50"
+                  >
+                    {suggestingQuickSpecs ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                    )}
+                    <span>{suggestingQuickSpecs ? 'Đang phân tích Gemini...' : '✨ AI Gợi ý Specs (Gemini)'}</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
@@ -1147,6 +1505,21 @@ export function PurchaseForm() {
 
               <div>
                 <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                  Ảnh Đại Diện Linh Kiện & Tạo Ảnh Tự Động AI
+                </label>
+                <ProductAiImagePicker
+                  imageUrl={newProdData.imageUrl}
+                  onChange={(url) => setNewProdData((prev) => ({ ...prev, imageUrl: url }))}
+                  productName={newProdData.name}
+                  category={newProdData.category}
+                  brand={newProdData.brand}
+                  model={newProdData.model}
+                  compact={true}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
                   Mô Tả / Ghi Chú Linh Kiện
                 </label>
                 <textarea
@@ -1158,12 +1531,11 @@ export function PurchaseForm() {
                 />
               </div>
 
-              {/* Specs Section Toggle */}
               <div className="pt-2 border-t border-[rgb(var(--border))] space-y-3">
                 <button
                   type="button"
                   onClick={() => setShowAllSpecs(!showAllSpecs)}
-                  className="text-xs font-bold text-indigo-500 hover:text-indigo-600 flex items-center gap-1.5"
+                  className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5"
                 >
                   <FileText className="w-4 h-4" />
                   <span>{showAllSpecs ? 'Thu gọn Thông số kỹ thuật (Specs)' : '+ Mở rộng Thông số kỹ thuật (Specs)'}</span>
@@ -1215,7 +1587,6 @@ export function PurchaseForm() {
                 )}
               </div>
 
-              {/* Modal Footer Buttons */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-[rgb(var(--border))] shrink-0">
                 <button
                   type="button"
@@ -1236,6 +1607,35 @@ export function PurchaseForm() {
           </div>
         </div>
       )}
+
+      {/* Excel Bulk Paste Modal */}
+      <PurchaseExcelPasteModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        products={products}
+        onImport={handleImportExcelRows}
+      />
+
+      {/* Batch Warranty Modal */}
+      <PurchaseBatchWarrantyModal
+        isOpen={showBatchWarrantyModal}
+        onClose={() => setShowBatchWarrantyModal(false)}
+        selectedCount={selectedIndices.size}
+        onApply={handleApplyBatchWarranty}
+      />
+
+      {/* Bulk Serial Generation Modal */}
+      <PurchaseBulkSerialModal
+        isOpen={showBulkSerialModal}
+        onClose={() => setShowBulkSerialModal(false)}
+        items={items}
+        selectedIndices={selectedIndices}
+        purchaseDate={purchaseDate}
+        onApply={(updated) => {
+          setItems(updated);
+          toast.success('✨ Đã sinh và cập nhật Serial hàng loạt thành công!');
+        }}
+      />
     </div>
   );
 }

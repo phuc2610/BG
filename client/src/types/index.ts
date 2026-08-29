@@ -420,6 +420,7 @@ export interface DashboardStats {
   totalCost: number;
   totalStockValuation: number;
   totalProfit: number;
+  profitMargin?: number;
   totalCustomerDebt: number;
   totalSupplierDebt: number;
   totalFinalizedInvoices: number;
@@ -427,6 +428,7 @@ export interface DashboardStats {
   byCategory: Record<string, number>;
   byCondition: Record<string, number>;
 }
+
 
 export interface PaginatedResponse<T> {
   success: boolean;
@@ -573,6 +575,7 @@ export interface PurchaseItemRecord {
   condition: ProductCondition;
   supplierWarrantyMonths: number;
   serials: string[];
+  serialDetails?: InventoryUnitRecord[];
   total: number;
 }
 
@@ -624,6 +627,18 @@ export interface InventoryUnitRecord {
   soldInvoiceId?: string;
   soldInvoiceCode?: string;
   soldAt?: string;
+  customerInfo?: {
+    customerId?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    invoiceId?: string;
+    invoiceCode?: string;
+    soldAt?: string;
+    sellerName?: string;
+    isFinalized?: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }

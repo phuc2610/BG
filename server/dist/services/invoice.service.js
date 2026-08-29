@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -22,6 +55,11 @@ class InvoiceService {
         const invoice = await invoiceRepo.findById(id);
         if (!invoice)
             throw new product_service_1.AppError('Hóa đơn không tồn tại', 404);
+        if (invoice.isFinalized) {
+            const { recalculateInvoiceFinancials } = await Promise.resolve().then(() => __importStar(require('./returnExchange.service')));
+            await recalculateInvoiceFinancials(invoice);
+            await invoice.save();
+        }
         return invoice;
     }
     async getStats(startDate, endDate) {
@@ -175,19 +213,24 @@ class InvoiceService {
         }
         // Save selectedSerials on invoice item
         item.selectedSerials = selectedSerials;
-        // Recalculate totalCost & profit from all selected serials across invoice lines
-        const allSelectedSerials = [];
+        // Recalculate totalCost & profit across all invoice lines (serial & non-serial items)
+        let draftTotalCost = 0;
         for (const it of invoice.items) {
-            if (it.selectedSerials && it.selectedSerials.length > 0) {
-                allSelectedSerials.push(...it.selectedSerials);
+            const lineSerials = (it.selectedSerials || []).filter((s) => s && s.trim());
+            if (lineSerials.length > 0) {
+                const selectedUnits = await models_1.InventoryUnit.find({ serialNumber: { $in: lineSerials } }).exec();
+                const foundCost = selectedUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+                const missingQty = Math.max(0, it.quantity - selectedUnits.length);
+                const fallbackCost = (Number(it.productSnapshot?.costPrice) || 0) * missingQty;
+                draftTotalCost += (foundCost + fallbackCost);
+            }
+            else {
+                const unitCost = Number(it.productSnapshot?.costPrice) || 0;
+                draftTotalCost += (unitCost * it.quantity);
             }
         }
-        if (allSelectedSerials.length > 0) {
-            const selectedUnits = await models_1.InventoryUnit.find({ serialNumber: { $in: allSelectedSerials } }).exec();
-            const currentCost = selectedUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
-            invoice.totalCost = currentCost;
-            invoice.profit = invoice.grandTotal - currentCost;
-        }
+        invoice.totalCost = draftTotalCost;
+        invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - draftTotalCost;
         invoice.history.push({
             action: 'CHỌN_SERIAL_NHÁP',
             description: `Chọn ${selectedSerials.length}/${requiredQty} Serial cho ${item.productSnapshot.name}`,
@@ -312,9 +355,20 @@ class InvoiceService {
         }
         // 2. Calculate actual cost price & profit from chosen physical units
         const actualUnits = await models_1.InventoryUnit.find({ _id: { $in: unitsToMarkSold } }).exec();
-        const actualTotalCost = actualUnits.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+        let actualTotalCost = 0;
+        for (const u of actualUnits) {
+            if (u.purchasePrice && u.purchasePrice > 0) {
+                actualTotalCost += u.purchasePrice;
+            }
+            else {
+                const itemMatch = invoice.items.find((it) => (it.productId && u.productId && it.productId.toString() === u.productId.toString()) ||
+                    (u.serialNumber && it.selectedSerials?.includes(u.serialNumber)));
+                const fallbackCost = Number(itemMatch?.productSnapshot?.costPrice) || 0;
+                actualTotalCost += fallbackCost;
+            }
+        }
         invoice.totalCost = actualTotalCost;
-        invoice.profit = invoice.grandTotal - actualTotalCost;
+        invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - actualTotalCost;
         // 3. Customer payment & debt validation
         if (data?.paidAmount !== undefined) {
             invoice.totalPaid = Number(data.paidAmount);
@@ -458,6 +512,184 @@ class InvoiceService {
         });
         await invoice.save();
         return invoice;
+    }
+    /**
+     * Retrieves complete purchase origin tracking for all items in an invoice.
+     * Handles items with Serial Numbers, items without Serial Numbers (bulk/accessories),
+     * and queries matched Purchase Receipts / Inventory Units.
+     */
+    async getOriginDetails(invoiceId) {
+        const invoice = await invoiceRepo.findById(invoiceId);
+        if (!invoice)
+            throw new product_service_1.AppError('Hóa đơn không tồn tại', 404);
+        // 1. Fetch all InventoryUnits linked directly to this invoice (sold or reserved)
+        const linkedUnits = await models_1.InventoryUnit.find({
+            $or: [
+                { soldInvoiceId: invoice._id },
+                { reservedByInvoiceId: invoice._id },
+            ],
+        }).lean().exec();
+        // 2. Fetch all InventoryUnits matching any selectedSerials in items
+        const allSerials = (invoice.items || []).flatMap((it) => it.selectedSerials || []).filter(Boolean);
+        const serialUnits = allSerials.length > 0
+            ? await models_1.InventoryUnit.find({ serialNumber: { $in: allSerials } }).lean().exec()
+            : [];
+        const combinedUnits = [...linkedUnits, ...serialUnits];
+        const unitMapBySerial = new Map();
+        const unitListByProduct = new Map();
+        for (const u of combinedUnits) {
+            if (u.serialNumber) {
+                unitMapBySerial.set(u.serialNumber, u);
+            }
+            const pId = u.productId?.toString();
+            if (pId) {
+                if (!unitListByProduct.has(pId))
+                    unitListByProduct.set(pId, []);
+                const list = unitListByProduct.get(pId);
+                if (!list.some((existing) => existing._id.toString() === u._id.toString())) {
+                    list.push(u);
+                }
+            }
+        }
+        const now = new Date();
+        // 3. For each invoice item, build origin details
+        const itemOrigins = await Promise.all(invoice.items.map(async (item, idx) => {
+            const pId = item.productId?.toString() || item.productSnapshot?.productId || item.productSnapshot?._id?.toString();
+            const productCode = item.productSnapshot?.productCode;
+            const serials = (item.selectedSerials || []).filter((s) => s && s.trim());
+            let origins = [];
+            // Case A: Has specific serials
+            if (serials.length > 0) {
+                for (const sn of serials) {
+                    const u = unitMapBySerial.get(sn);
+                    if (u) {
+                        const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
+                        const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
+                        const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+                        origins.push({
+                            sourceType: 'SERIAL',
+                            serialNumber: u.serialNumber,
+                            purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
+                            supplierName: u.supplierName || 'NCC N/A',
+                            purchaseDate: u.purchaseDate || u.createdAt,
+                            purchasePrice: u.purchasePrice || 0,
+                            listPrice: u.listPrice || 0,
+                            condition: u.condition || 'New',
+                            supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
+                            supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+                            remainingWarrantyDays: remainingDays,
+                            quantity: 1,
+                        });
+                    }
+                    else {
+                        const rawU = await models_1.InventoryUnit.findOne({ serialNumber: sn }).lean().exec();
+                        if (rawU) {
+                            const endDate = rawU.supplierWarrantyEndDate ? new Date(rawU.supplierWarrantyEndDate) : null;
+                            const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
+                            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+                            origins.push({
+                                sourceType: 'SERIAL',
+                                serialNumber: rawU.serialNumber,
+                                purchaseCode: rawU.purchaseCode || 'PNK (Chưa gán)',
+                                supplierName: rawU.supplierName || 'NCC N/A',
+                                purchaseDate: rawU.purchaseDate || rawU.createdAt,
+                                purchasePrice: rawU.purchasePrice || 0,
+                                listPrice: rawU.listPrice || 0,
+                                condition: rawU.condition || 'New',
+                                supplierWarrantyMonths: rawU.supplierWarrantyMonths || 0,
+                                supplierWarrantyEndDate: rawU.supplierWarrantyEndDate,
+                                remainingWarrantyDays: remainingDays,
+                                quantity: 1,
+                            });
+                        }
+                        else {
+                            origins.push({
+                                sourceType: 'SERIAL',
+                                serialNumber: sn,
+                                purchaseCode: 'PNK (Chưa gán)',
+                                supplierName: 'NCC N/A',
+                                purchaseDate: invoice.createdDate,
+                                purchasePrice: 0,
+                                listPrice: 0,
+                                condition: 'New',
+                                quantity: 1,
+                            });
+                        }
+                    }
+                }
+            }
+            // Case B: No serials or origins is empty (e.g. Case, Cooler, Bulk, etc.)
+            if (origins.length === 0) {
+                const linkedForProduct = (pId ? unitListByProduct.get(pId) : []) || [];
+                if (linkedForProduct.length > 0) {
+                    for (const u of linkedForProduct) {
+                        const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
+                        const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
+                        const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+                        origins.push({
+                            sourceType: 'UNIT_NO_SERIAL',
+                            serialNumber: u.serialNumber || '— (Không dùng S/N)',
+                            purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
+                            supplierName: u.supplierName || 'NCC N/A',
+                            purchaseDate: u.purchaseDate || u.createdAt,
+                            purchasePrice: u.purchasePrice || 0,
+                            listPrice: u.listPrice || 0,
+                            condition: u.condition || 'New',
+                            supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
+                            supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+                            remainingWarrantyDays: remainingDays,
+                            quantity: 1,
+                        });
+                    }
+                }
+                else {
+                    // Find recent Purchase receipts for this product
+                    const queryConditions = [];
+                    if (pId && mongoose_1.default.Types.ObjectId.isValid(pId)) {
+                        queryConditions.push({ 'items.product': new mongoose_1.default.Types.ObjectId(pId) });
+                    }
+                    if (productCode) {
+                        queryConditions.push({ 'items.productCode': productCode });
+                    }
+                    const purchases = queryConditions.length > 0
+                        ? await models_1.Purchase.find({ $or: queryConditions, isDraft: { $ne: true } })
+                            .sort({ purchaseDate: -1 })
+                            .limit(5)
+                            .lean()
+                            .exec()
+                        : [];
+                    if (purchases.length > 0) {
+                        for (const p of purchases) {
+                            const matchedItem = (p.items || []).find((it) => (pId && it.product?.toString() === pId) ||
+                                (productCode && it.productCode === productCode));
+                            if (matchedItem) {
+                                origins.push({
+                                    sourceType: 'PURCHASE_RECEIPT',
+                                    serialNumber: '— (Theo phiếu nhập)',
+                                    purchaseCode: p.purchaseCode,
+                                    supplierName: p.supplier?.name || p.supplier?.companyName || 'NCC N/A',
+                                    purchaseDate: p.purchaseDate,
+                                    purchasePrice: matchedItem.costPrice || 0,
+                                    listPrice: matchedItem.listPrice || 0,
+                                    condition: matchedItem.condition || 'New',
+                                    supplierWarrantyMonths: matchedItem.supplierWarrantyMonths || 0,
+                                    quantity: matchedItem.quantity || 1,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return {
+                itemIndex: idx,
+                productId: pId,
+                productCode: item.productSnapshot?.productCode,
+                productName: item.productSnapshot?.name,
+                quantity: item.quantity,
+                origins,
+            };
+        }));
+        return itemOrigins;
     }
 }
 exports.InvoiceService = InvoiceService;

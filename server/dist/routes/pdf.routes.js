@@ -27,7 +27,29 @@ router.get('/quotes/:id/html', (0, middleware_1.asyncHandler)(async (req, res) =
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const quote = await quoteService.getById(id);
     const html = await pdfService.getQuoteHtml(quote);
-    const autoPrintHtml = html.replace('</body>', '<script>window.onload = function() { window.print(); }</script></body>');
+    const autoPrintScript = `
+<script>
+  async function waitForImagesAndPrint() {
+    const imgs = Array.from(document.images);
+    await Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+    setTimeout(() => {
+      window.print();
+    }, 400);
+  }
+  if (document.readyState === 'complete') {
+    waitForImagesAndPrint();
+  } else {
+    window.addEventListener('load', waitForImagesAndPrint);
+  }
+</script>
+</body>`;
+    const autoPrintHtml = html.replace('</body>', autoPrintScript);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(autoPrintHtml);
 }));
@@ -49,7 +71,29 @@ router.get('/invoices/:id/html', (0, middleware_1.asyncHandler)(async (req, res)
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const invoice = await invoiceService.getById(id);
     const html = await pdfService.getInvoiceHtml(invoice);
-    const autoPrintHtml = html.replace('</body>', '<script>window.onload = function() { window.print(); }</script></body>');
+    const autoPrintScript = `
+<script>
+  async function waitForImagesAndPrint() {
+    const imgs = Array.from(document.images);
+    await Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+    setTimeout(() => {
+      window.print();
+    }, 400);
+  }
+  if (document.readyState === 'complete') {
+    waitForImagesAndPrint();
+  } else {
+    window.addEventListener('load', waitForImagesAndPrint);
+  }
+</script>
+</body>`;
+    const autoPrintHtml = html.replace('</body>', autoPrintScript);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(autoPrintHtml);
 }));

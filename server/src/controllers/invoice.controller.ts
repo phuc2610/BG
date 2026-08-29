@@ -111,5 +111,12 @@ export class InvoiceController {
     const history = await returnService.getInvoiceTransactions(id);
     res.json({ success: true, data: history });
   });
+
+  // GET /api/invoices/:id/origin-details
+  getOriginDetails = asyncHandler(async (req: Request, res: Response) => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const origins = await invoiceService.getOriginDetails(id);
+    res.json({ success: true, data: origins });
+  });
 }
 

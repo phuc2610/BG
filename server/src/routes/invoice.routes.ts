@@ -20,6 +20,7 @@ router.post('/:id/cancel', requirePermission('invoice.cancel'), (req, res, next)
 router.post('/:id/return', requirePermission('invoice.edit'), (req, res, next) => controller.processReturn(req, res, next));
 router.post('/:id/exchange', requirePermission('invoice.edit'), (req, res, next) => controller.processExchange(req, res, next));
 router.get('/:id/return-exchange-history', requirePermission('invoice.view'), (req, res, next) => controller.getReturnExchangeHistory(req, res, next));
+router.get('/:id/origin-details', requirePermission('invoice.view'), (req, res, next) => controller.getOriginDetails(req, res, next));
 
 export default router;
 

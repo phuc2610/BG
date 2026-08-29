@@ -50,9 +50,24 @@ class InventoryUnitService {
                 { modelName: searchRegex },
             ];
         }
-        const products = await models_1.Product.find(filter).sort({ name: 1 }).exec();
-        const result = await Promise.all(products.map(async (product) => {
-            const units = await models_1.InventoryUnit.find({ productId: product._id }).exec();
+        const products = await models_1.Product.find(filter).sort({ name: 1 }).lean().exec();
+        if (products.length === 0)
+            return [];
+        const productIds = products.map((p) => p._id);
+        const allUnits = await models_1.InventoryUnit.find({ productId: { $in: productIds } }).lean().exec();
+        // Group units by productId
+        const unitsByProductMap = new Map();
+        for (const u of allUnits) {
+            const pidStr = u.productId.toString();
+            if (!unitsByProductMap.has(pidStr)) {
+                unitsByProductMap.set(pidStr, []);
+            }
+            unitsByProductMap.get(pidStr).push(u);
+        }
+        const result = products.map((product) => {
+            const p = product;
+            const pidStr = p._id.toString();
+            const units = unitsByProductMap.get(pidStr) || [];
             const availableUnits = units.filter((u) => u.status === types_1.InventoryUnitStatus.AVAILABLE);
             const reservedUnits = units.filter((u) => u.status === types_1.InventoryUnitStatus.RESERVED);
             const soldUnits = units.filter((u) => u.status === types_1.InventoryUnitStatus.SOLD);
@@ -63,20 +78,24 @@ class InventoryUnitService {
             const activeUnitsList = inStockUnits.length > 0 ? inStockUnits : units;
             const sortedByDate = [...activeUnitsList].sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
             const latestUnit = sortedByDate.length > 0 ? sortedByDate[0] : null;
-            const latestCostPrice = latestUnit ? latestUnit.purchasePrice : 0;
+            const latestCostPrice = latestUnit ? (latestUnit.purchasePrice || 0) : 0;
             const latestListPrice = (latestUnit && latestUnit.listPrice && latestUnit.listPrice > 0)
                 ? latestUnit.listPrice
-                : (product.sellingPrice && product.sellingPrice > 0)
-                    ? product.sellingPrice
+                : (p.sellingPrice && p.sellingPrice > 0)
+                    ? p.sellingPrice
                     : latestCostPrice;
-            const totalStockListValue = inStockUnits.reduce((sum, u) => sum + (u.listPrice || product.sellingPrice || u.purchasePrice || 0), 0);
+            const totalStockListValue = inStockUnits.reduce((sum, u) => sum + (u.listPrice || p.sellingPrice || u.purchasePrice || 0), 0);
+            const thumbUrl = p.thumbnailUrl ||
+                (p.images && p.images.length > 0
+                    ? (p.images.find((img) => img.isThumbnail) || p.images[0])?.url
+                    : null);
             return {
-                productId: product._id,
-                productCode: product.productCode,
-                productName: product.name,
-                category: product.category,
-                brand: product.brand,
-                imageUrl: product.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
+                productId: p._id,
+                productCode: p.productCode,
+                productName: p.name,
+                category: p.category,
+                brand: p.brand,
+                imageUrl: thumbUrl,
                 availableStock: availableUnits.length,
                 reservedStock: reservedUnits.length,
                 soldStock: soldUnits.length,
@@ -86,42 +105,158 @@ class InventoryUnitService {
                 totalStockValue,
                 totalStockListValue,
             };
-        }));
+        });
+        // Filter out zero-stock products when inStockOnly is enabled
+        if (query.inStockOnly === 'true' || query.inStockOnly === '1') {
+            return result.filter((p) => p.availableStock > 0 || p.reservedStock > 0);
+        }
         return result;
     }
     /**
-     * Aggregates physical inventory grouped by PRODUCT and CONDITION.
-     * Allows quoting exact product variants by condition (New, Like New, 99%...) with precise stock counts per condition.
+     * Returns flat array of all in-stock InventoryUnits with product info for Excel export.
+     */
+    async getExportData(query) {
+        // Build unit filter
+        const unitFilter = {};
+        // Default: only in-stock units (AVAILABLE + RESERVED)
+        if (query.inStockOnly === 'true' || query.inStockOnly === '1' || !query.inStockOnly) {
+            unitFilter.status = { $in: [types_1.InventoryUnitStatus.AVAILABLE, types_1.InventoryUnitStatus.RESERVED] };
+        }
+        // If category filter, first find matching product IDs
+        let productIdFilter = {};
+        if (query.category) {
+            productIdFilter.category = query.category;
+        }
+        if (query.search && query.search.trim()) {
+            const searchRegex = new RegExp(query.search.trim(), 'i');
+            productIdFilter.$or = [
+                { productCode: searchRegex },
+                { name: searchRegex },
+                { brand: searchRegex },
+                { modelName: searchRegex },
+            ];
+        }
+        // Get matching products
+        const products = await models_1.Product.find(productIdFilter).exec();
+        const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+        const productIds = products.map((p) => p._id);
+        if (productIds.length > 0) {
+            unitFilter.productId = { $in: productIds };
+        }
+        else if (Object.keys(productIdFilter).length > 0) {
+            // Search/category specified but no products match
+            return [];
+        }
+        const units = await models_1.InventoryUnit.find(unitFilter)
+            .sort({ productName: 1, serialNumber: 1 })
+            .exec();
+        const now = new Date();
+        return units.map((u) => {
+            const product = productMap.get(u.productId.toString());
+            const endDate = new Date(u.supplierWarrantyEndDate);
+            const diffTime = endDate.getTime() - now.getTime();
+            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+            let warrantyStatusLabel = 'Còn BH';
+            if (remainingDays <= 0) {
+                warrantyStatusLabel = 'Hết BH';
+            }
+            else if (remainingDays <= 30) {
+                warrantyStatusLabel = 'Sắp hết BH';
+            }
+            const statusLabel = u.status === types_1.InventoryUnitStatus.AVAILABLE
+                ? 'Còn hàng'
+                : u.status === types_1.InventoryUnitStatus.RESERVED
+                    ? 'Đã đặt cọc'
+                    : u.status === types_1.InventoryUnitStatus.SOLD
+                        ? 'Đã bán'
+                        : u.status === types_1.InventoryUnitStatus.DAMAGED
+                            ? 'Lỗi kho'
+                            : u.status === types_1.InventoryUnitStatus.WARRANTY
+                                ? 'Bảo hành'
+                                : u.status;
+            return {
+                unitId: u._id,
+                productId: u.productId,
+                productCode: u.productCode,
+                productName: u.productName,
+                category: product?.category || u.productName,
+                brand: product?.brand || '',
+                condition: u.condition,
+                serialNumber: u.serialNumber || 'Không có serial',
+                supplierName: u.supplierName || 'Không có',
+                purchaseCode: u.purchaseCode || '',
+                purchaseDate: u.purchaseDate,
+                purchasePrice: u.purchasePrice,
+                listPrice: u.listPrice || product?.sellingPrice || u.purchasePrice,
+                supplierWarrantyMonths: u.supplierWarrantyMonths,
+                supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+                warrantyStatusLabel,
+                remainingDays,
+                status: u.status,
+                statusLabel,
+            };
+        });
+    }
+    /**
+     * Fast grouped inventory by condition for Quotes & Invoices.
+     * Uses single batch query to eliminate N+1 latency.
      */
     async getGroupedInventoryByCondition(query) {
         const filter = {};
         if (query.search && query.search.trim()) {
-            const searchRegex = new RegExp(query.search.trim(), 'i');
+            const term = query.search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+            const searchRegex = new RegExp(term, 'i');
+            // Also search matching serial units
+            const serialUnits = await models_1.InventoryUnit.find({ serialNumber: searchRegex })
+                .select('productId')
+                .lean()
+                .exec();
+            const serialProductIds = serialUnits.map((u) => u.productId);
             filter.$or = [
                 { productCode: searchRegex },
                 { name: searchRegex },
                 { brand: searchRegex },
+                { modelName: searchRegex },
+                ...(serialProductIds.length > 0 ? [{ _id: { $in: serialProductIds } }] : []),
             ];
         }
-        const products = await models_1.Product.find(filter).sort({ name: 1 }).exec();
+        const products = await models_1.Product.find(filter).sort({ name: 1 }).lean().exec();
+        if (products.length === 0)
+            return [];
+        const productIds = products.map((p) => p._id);
+        const allUnits = await models_1.InventoryUnit.find({ productId: { $in: productIds } }).lean().exec();
+        // Group units by productId
+        const unitsByProductMap = new Map();
+        for (const u of allUnits) {
+            const pidStr = u.productId.toString();
+            if (!unitsByProductMap.has(pidStr)) {
+                unitsByProductMap.set(pidStr, []);
+            }
+            unitsByProductMap.get(pidStr).push(u);
+        }
         const resultVariants = [];
         for (const product of products) {
-            const units = await models_1.InventoryUnit.find({ productId: product._id }).exec();
             const p = product;
+            const pidStr = p._id.toString();
+            const units = unitsByProductMap.get(pidStr) || [];
+            const thumbUrl = p.thumbnailUrl ||
+                (p.images && p.images.length > 0
+                    ? (p.images.find((img) => img.isThumbnail) || p.images[0])?.url
+                    : null);
             if (units.length === 0) {
                 resultVariants.push({
-                    productId: product._id,
-                    productCode: product.productCode,
-                    productName: product.name,
-                    category: product.category,
+                    productId: p._id,
+                    productCode: p.productCode,
+                    productName: p.name,
+                    category: p.category,
                     condition: p.condition || 'New',
                     availableStock: 0,
                     reservedStock: 0,
                     costPrice: 0,
                     listPrice: p.sellingPrice || 0,
                     suggestedSellingPrice: p.sellingPrice || 0,
-                    imageUrl: p.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
-                    specs: product.specs,
+                    imageUrl: thumbUrl,
+                    specs: p.specs,
                 });
             }
             else {
@@ -136,27 +271,27 @@ class InventoryUnitService {
                     const avail = condUnits.filter((u) => u.status === types_1.InventoryUnitStatus.AVAILABLE).length;
                     const res = condUnits.filter((u) => u.status === types_1.InventoryUnitStatus.RESERVED).length;
                     const inStockCondUnits = condUnits.filter((u) => u.status === types_1.InventoryUnitStatus.AVAILABLE || u.status === types_1.InventoryUnitStatus.RESERVED);
-                    const sortedByDate = [...inStockCondUnits.length > 0 ? inStockCondUnits : condUnits].sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+                    const sortedByDate = [...(inStockCondUnits.length > 0 ? inStockCondUnits : condUnits)].sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
                     const latestUnit = sortedByDate.length > 0 ? sortedByDate[0] : null;
-                    const latestCostPrice = latestUnit ? latestUnit.purchasePrice : 0;
-                    const latestListPrice = (latestUnit && latestUnit.listPrice && latestUnit.listPrice > 0)
+                    const latestCostPrice = latestUnit ? (latestUnit.purchasePrice || 0) : 0;
+                    const latestListPrice = latestUnit && latestUnit.listPrice && latestUnit.listPrice > 0
                         ? latestUnit.listPrice
-                        : (p.sellingPrice && p.sellingPrice > 0)
+                        : p.sellingPrice && p.sellingPrice > 0
                             ? p.sellingPrice
                             : latestCostPrice;
                     resultVariants.push({
-                        productId: product._id,
-                        productCode: product.productCode,
-                        productName: product.name,
-                        category: product.category,
+                        productId: p._id,
+                        productCode: p.productCode,
+                        productName: p.name,
+                        category: p.category,
                         condition: cond,
                         availableStock: avail,
                         reservedStock: res,
                         costPrice: latestCostPrice,
                         listPrice: latestListPrice,
                         suggestedSellingPrice: latestListPrice,
-                        imageUrl: p.thumbnailUrl || (product.images && product.images.length > 0 ? product.images[0].url : null),
-                        specs: product.specs,
+                        imageUrl: thumbUrl,
+                        specs: p.specs,
                     });
                 }
             }
@@ -164,7 +299,8 @@ class InventoryUnitService {
         return resultVariants;
     }
     /**
-     * Returns individual physical serial units for a specific Product with calculated warranty days.
+     * Returns individual physical serial units for a specific Product with calculated warranty days
+     * and buyer customer info if the unit was sold or reserved.
      */
     async getUnitsByProduct(productId) {
         if (!productId || productId === 'undefined')
@@ -180,6 +316,65 @@ class InventoryUnitService {
             }
         }
         const units = await models_1.InventoryUnit.find(filter).sort({ purchaseDate: -1 }).exec();
+        const now = new Date();
+        // Fetch related invoices to extract buyer / customer info
+        const invoiceIds = Array.from(new Set([
+            ...units.map((u) => u.soldInvoiceId?.toString()),
+            ...units.map((u) => u.reservedByInvoiceId?.toString()),
+        ].filter(Boolean)));
+        const invoices = invoiceIds.length > 0
+            ? await models_1.Invoice.find({ _id: { $in: invoiceIds } })
+                .select('invoiceCode customerId customer createdDate status isFinalized')
+                .lean()
+                .exec()
+            : [];
+        const invoiceMap = new Map(invoices.map((inv) => [inv._id.toString(), inv]));
+        return units.map((u) => {
+            const endDate = new Date(u.supplierWarrantyEndDate);
+            const diffTime = endDate.getTime() - now.getTime();
+            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+            let warrantyStatus = 'NORMAL';
+            if (remainingDays <= 0) {
+                warrantyStatus = 'EXPIRED';
+            }
+            else if (remainingDays <= 30) {
+                warrantyStatus = 'DUE_SOON';
+            }
+            const relInvoiceId = u.soldInvoiceId?.toString() || u.reservedByInvoiceId?.toString();
+            const inv = relInvoiceId ? invoiceMap.get(relInvoiceId) : null;
+            const customerInfo = inv
+                ? {
+                    customerId: inv.customerId ? inv.customerId.toString() : undefined,
+                    customerName: inv.customer?.name || 'Khách lẻ',
+                    customerPhone: inv.customer?.phone || '',
+                    customerEmail: inv.customer?.email || '',
+                    customerAddress: inv.customer?.address || '',
+                    invoiceId: inv._id ? inv._id.toString() : undefined,
+                    invoiceCode: inv.invoiceCode,
+                    soldAt: u.soldAt || inv.createdDate,
+                    isFinalized: inv.isFinalized,
+                }
+                : null;
+            return {
+                ...u.toObject(),
+                remainingWarrantyDays: remainingDays,
+                warrantyStatus,
+                customerInfo,
+            };
+        });
+    }
+    /**
+     * Returns units matching a list of serial numbers with full purchase and warranty info.
+     */
+    async getUnitsBySerials(serials) {
+        if (!serials || serials.length === 0)
+            return [];
+        const validSerials = serials.filter(Boolean);
+        if (validSerials.length === 0)
+            return [];
+        const units = await models_1.InventoryUnit.find({ serialNumber: { $in: validSerials } })
+            .sort({ purchaseDate: -1 })
+            .exec();
         const now = new Date();
         return units.map((u) => {
             const endDate = new Date(u.supplierWarrantyEndDate);

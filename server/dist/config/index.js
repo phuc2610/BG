@@ -16,5 +16,7 @@ exports.config = {
         apiKey: process.env.CLOUDINARY_API_KEY || '',
         apiSecret: process.env.CLOUDINARY_API_SECRET || '',
     },
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
 };
 //# sourceMappingURL=index.js.map

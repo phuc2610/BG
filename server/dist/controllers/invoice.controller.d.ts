@@ -13,5 +13,6 @@ export declare class InvoiceController {
     processReturn: (req: Request, res: Response, next: NextFunction) => void;
     processExchange: (req: Request, res: Response, next: NextFunction) => void;
     getReturnExchangeHistory: (req: Request, res: Response, next: NextFunction) => void;
+    getOriginDetails: (req: Request, res: Response, next: NextFunction) => void;
 }
 //# sourceMappingURL=invoice.controller.d.ts.map

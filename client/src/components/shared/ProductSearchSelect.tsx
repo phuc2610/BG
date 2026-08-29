@@ -9,6 +9,7 @@ interface ProductSearchSelectProps {
   placeholder?: string;
   onAddNew?: () => void;
   required?: boolean;
+  onSelectAndFocusNext?: () => void;
 }
 
 export function ProductSearchSelect({
@@ -18,11 +19,14 @@ export function ProductSearchSelect({
   placeholder = '-- Tìm & Chọn sản phẩm --',
   onAddNew,
   required = false,
+  onSelectAndFocusNext,
 }: ProductSearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   // Helper to get string ID
   const getPid = (p: any) =>
@@ -49,6 +53,11 @@ export function ProductSearchSelect({
     );
   });
 
+  // Reset activeIndex when filter changes
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [searchTerm]);
+
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -71,6 +80,9 @@ export function ProductSearchSelect({
     onChange(pId);
     setIsOpen(false);
     setSearchTerm('');
+    if (onSelectAndFocusNext) {
+      setTimeout(() => onSelectAndFocusNext(), 50);
+    }
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -79,13 +91,42 @@ export function ProductSearchSelect({
     setSearchTerm('');
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev + 1) % Math.max(1, filteredProducts.length));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev - 1 + filteredProducts.length) % Math.max(1, filteredProducts.length));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredProducts.length > 0 && activeIndex >= 0 && activeIndex < filteredProducts.length) {
+        handleSelect(getPid(filteredProducts[activeIndex]));
+      }
+    }
+  };
+
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={cn('relative w-full', isOpen && 'z-50')}>
       {/* Target trigger box */}
       <div
+        ref={triggerRef}
+        tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={handleKeyDown}
         className={cn(
-          'w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border transition-all cursor-pointer flex items-center justify-between gap-2 select-none min-h-[38px]',
+          'w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border transition-all cursor-pointer flex items-center justify-between gap-2 select-none min-h-[38px] focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500',
           isOpen
             ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md'
             : 'border-[rgb(var(--border))] hover:border-indigo-500/50',
@@ -142,7 +183,7 @@ export function ProductSearchSelect({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+        <div className="absolute left-0 top-full mt-1.5 w-full min-w-[340px] sm:min-w-[420px] max-w-[90vw] z-50 bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
           {/* Search Header */}
           <div className="p-2 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/30] flex items-center gap-2">
             <Search className="w-4 h-4 text-indigo-500 shrink-0 ml-2" />
@@ -151,6 +192,7 @@ export function ProductSearchSelect({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Tìm theo mã, tên, hãng, danh mục..."
               className="w-full bg-transparent border-none text-xs text-[rgb(var(--foreground))] focus:outline-none placeholder:text-[rgb(var(--muted-foreground))]"
             />
@@ -188,19 +230,23 @@ export function ProductSearchSelect({
                 )}
               </div>
             ) : (
-              filteredProducts.map((p) => {
+              filteredProducts.map((p, idx) => {
                 const pid = getPid(p);
                 const isSelected = pid === value;
+                const isActive = idx === activeIndex;
                 const brandStr = typeof p.brand === 'object' ? p.brand?.name : p.brand;
                 return (
                   <div
                     key={pid}
                     onClick={() => handleSelect(pid)}
+                    onMouseEnter={() => setActiveIndex(idx)}
                     className={cn(
                       'px-3 py-2.5 rounded-xl text-xs cursor-pointer flex items-center justify-between gap-3 transition-colors',
                       isSelected
-                        ? 'bg-indigo-500/10 text-indigo-500 font-bold'
-                        : 'hover:bg-[rgb(var(--accent))] text-[rgb(var(--foreground))]'
+                        ? 'bg-indigo-500/15 text-indigo-400 font-bold border border-indigo-500/30'
+                        : isActive
+                        ? 'bg-[rgb(var(--accent))] text-[rgb(var(--foreground))]'
+                        : 'text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))]'
                     )}
                   >
                     <div className="flex items-center gap-2 overflow-hidden">

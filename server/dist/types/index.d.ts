@@ -592,6 +592,7 @@ export interface DashboardStats {
     totalRevenue: number;
     totalCost: number;
     totalProfit: number;
+    profitMargin?: number;
     byCategory: Record<string, number>;
     byCondition: Record<string, number>;
     recentInventory: IInventoryItem[];

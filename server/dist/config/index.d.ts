@@ -8,5 +8,7 @@ export declare const config: {
         readonly apiKey: string;
         readonly apiSecret: string;
     };
+    readonly openaiApiKey: string;
+    readonly geminiApiKey: string;
 };
 //# sourceMappingURL=index.d.ts.map

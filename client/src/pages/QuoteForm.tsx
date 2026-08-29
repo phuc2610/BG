@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -484,14 +484,12 @@ export function QuoteForm() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold truncate">{item.productSnapshot.name}</p>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-blue-500 font-mono">{item.productSnapshot.productCode}</p>
+                        <p className="text-sm font-semibold">{item.productSnapshot.name}</p>
                       </div>
                       <p className="text-xs text-[rgb(var(--muted-foreground))] mt-0.5 line-clamp-1">
                         {buildSpecsString(item.productSnapshot.specs as any)}
                       </p>
+
                       {item.productSnapshot.costPrice > 0 && (
                         <p className="text-[10px] text-[rgb(var(--muted-foreground))] mt-1">
                           Giá vốn nhập: {formatCurrency(item.productSnapshot.costPrice)}
@@ -710,7 +708,9 @@ function InventorySearchModal({
 }) {
   const [search, setSearch] = useState('');
   const [lots, setLots] = useState<any[]>([]);
+  const [allLots, setAllLots] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const requestIdRef = useRef(0);
 
   // Selected lot for setting selling price & warranty before adding
   const [activeLot, setActiveLot] = useState<any | null>(null);
@@ -719,12 +719,16 @@ function InventorySearchModal({
   const [selectedSerial, setSelectedSerial] = useState<string>('');
 
   const fetchLotsList = useCallback(
-    debounce(async (query: string) => {
+    debounce(async (query: string, reqId: number) => {
       setLoading(true);
       try {
         const params: Record<string, any> = {};
         if (query.trim()) params.search = query.trim();
         const res = await api.get('/inventory-units/by-condition', { params });
+        
+        // Ignore stale responses if user typed something newer
+        if (reqId !== requestIdRef.current) return;
+
         const variantsList = (res.data.data || []).map((v: any) => ({
           _id: v.productId,
           product: {
@@ -742,18 +746,40 @@ function InventorySearchModal({
           suggestedSellingPrice: v.suggestedSellingPrice,
         }));
         setLots(variantsList);
+        if (!query.trim()) {
+          setAllLots(variantsList);
+        }
       } catch (err) {
         console.error('Search failed', err);
       } finally {
-        setLoading(false);
+        if (reqId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
-    }, 200),
+    }, 150),
     []
   );
 
   useEffect(() => {
-    fetchLotsList(search);
-  }, [search]);
+    const currentReqId = ++requestIdRef.current;
+
+    // Instant local filtering from cache while waiting for backend
+    if (allLots.length > 0) {
+      if (search.trim()) {
+        const term = search.toLowerCase().trim();
+        const filtered = allLots.filter((item: any) => {
+          const code = (item.product?.productCode || item.stockCode || '').toLowerCase();
+          const name = (item.product?.name || '').toLowerCase();
+          return code.includes(term) || name.includes(term);
+        });
+        setLots(filtered);
+      } else {
+        setLots(allLots);
+      }
+    }
+
+    fetchLotsList(search, currentReqId);
+  }, [search, allLots.length]);
 
   const handlePickLot = (lot: any) => {
     setActiveLot(lot);
@@ -926,10 +952,10 @@ function InventorySearchModal({
                 </div>
               </div>
             ) : (
-              lots.map((lot) => (
+              lots.map((lot, idx) => (
                 <button
                   type="button"
-                  key={lot._id}
+                  key={`${lot._id}-${lot.condition || 'default'}-${idx}`}
                   onClick={() => handlePickLot(lot)}
                   className={cn(
                     'flex items-center gap-3 w-full p-3 rounded-xl text-left',

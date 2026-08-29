@@ -26,6 +26,9 @@ export declare class ProductService {
         model: string;
         description?: string;
         specs?: any;
+        imageUrl?: string;
+        imagePublicId?: string;
+        images?: any[];
         createdBy?: string;
     }): Promise<IProductDocument>;
     update(id: string, data: Partial<IProductDocument>): Promise<IProductDocument>;

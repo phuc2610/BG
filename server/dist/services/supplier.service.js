@@ -43,7 +43,26 @@ class SupplierService {
     }
     async update(id, data) {
         const supplier = await this.getById(id);
-        Object.assign(supplier, data);
+        if (data.name !== undefined)
+            supplier.name = data.name.trim();
+        if (data.companyName !== undefined)
+            supplier.companyName = data.companyName.trim();
+        if (data.phone !== undefined)
+            supplier.phone = data.phone.trim();
+        if (data.zalo !== undefined)
+            supplier.zalo = data.zalo.trim();
+        if (data.email !== undefined)
+            supplier.email = data.email.trim();
+        if (data.address !== undefined)
+            supplier.address = data.address.trim();
+        if (data.taxCode !== undefined)
+            supplier.taxCode = data.taxCode.trim();
+        if (data.accountNumber !== undefined)
+            supplier.accountNumber = data.accountNumber.trim();
+        if (data.bankName !== undefined)
+            supplier.bankName = data.bankName.trim();
+        if (data.notes !== undefined)
+            supplier.notes = data.notes.trim();
         await supplier.save();
         return supplier;
     }
@@ -54,17 +73,85 @@ class SupplierService {
         }
         return supplierRepo.deleteById(id);
     }
-    /**
-     * Returns complete Supplier profile: Details + Purchases + Payments + Debt + Purchased Products
-     */
     async getFullProfile(id) {
         const supplier = await this.getById(id);
-        const [purchasesRes, unitsRes] = await Promise.all([
-            purchaseRepo.search({ limit: 100, supplierId: id }),
-            unitRepo.search({ limit: 500, supplierId: id }),
+        const [purchases, rawUnits] = await Promise.all([
+            models_1.Purchase.find({ supplierId: id, isDraft: { $ne: true }, status: { $ne: 'DRAFT' } })
+                .sort({ purchaseDate: -1 })
+                .lean()
+                .exec(),
+            models_1.InventoryUnit.find({ supplierId: id })
+                .sort({ purchaseDate: -1 })
+                .exec(),
         ]);
-        const purchases = purchasesRes.data;
-        const activePurchases = purchases.filter((p) => !p.isDraft && p.status !== 'DRAFT');
+        const activePurchases = purchases;
+        // 1. Gather all invoice IDs related to these units (sold or reserved)
+        const invoiceIds = Array.from(new Set([
+            ...rawUnits.map((u) => u.soldInvoiceId?.toString()),
+            ...rawUnits.map((u) => u.reservedByInvoiceId?.toString()),
+        ].filter(Boolean)));
+        const invoices = invoiceIds.length > 0
+            ? await models_1.Invoice.find({ _id: { $in: invoiceIds } })
+                .select('invoiceCode customerId customer createdDate createdBy status isFinalized')
+                .lean()
+                .exec()
+            : [];
+        const invoiceMap = new Map(invoices.map((inv) => [inv._id.toString(), inv]));
+        const now = new Date();
+        const purchasedUnits = rawUnits.map((u) => {
+            const endDate = new Date(u.supplierWarrantyEndDate);
+            const diffTime = endDate.getTime() - now.getTime();
+            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+            let warrantyStatus = 'NORMAL';
+            if (remainingDays <= 0) {
+                warrantyStatus = 'EXPIRED';
+            }
+            else if (remainingDays <= 30) {
+                warrantyStatus = 'DUE_SOON';
+            }
+            const relInvoiceId = u.soldInvoiceId?.toString() || u.reservedByInvoiceId?.toString();
+            const inv = relInvoiceId ? invoiceMap.get(relInvoiceId) : null;
+            const customerInfo = inv
+                ? {
+                    customerId: inv.customerId ? inv.customerId.toString() : undefined,
+                    customerName: inv.customer?.name || 'Khách lẻ',
+                    customerPhone: inv.customer?.phone || '',
+                    customerEmail: inv.customer?.email || '',
+                    customerAddress: inv.customer?.address || '',
+                    invoiceId: inv._id ? inv._id.toString() : undefined,
+                    invoiceCode: inv.invoiceCode,
+                    soldAt: u.soldAt || inv.createdDate,
+                    sellerName: inv.createdBy || 'Admin',
+                    isFinalized: inv.isFinalized,
+                }
+                : null;
+            return {
+                ...u.toObject(),
+                remainingWarrantyDays: remainingDays,
+                warrantyStatus,
+                customerInfo,
+            };
+        });
+        const serialToUnitMap = new Map(purchasedUnits.map((u) => [u.serialNumber, u]));
+        // 2. Enrich each purchase item with serial details
+        const enrichedPurchases = activePurchases.map((p) => {
+            const itemsWithSerials = (p.items || []).map((it) => {
+                const serialDetails = (it.serials || []).map((sn) => {
+                    return (serialToUnitMap.get(sn) || {
+                        serialNumber: sn,
+                        status: 'AVAILABLE',
+                    });
+                });
+                return {
+                    ...it,
+                    serialDetails,
+                };
+            });
+            return {
+                ...p,
+                items: itemsWithSerials,
+            };
+        });
         let totalPurchased = 0;
         let totalPaid = 0;
         let totalDebt = 0;
@@ -95,9 +182,9 @@ class SupplierService {
         await supplier.save();
         return {
             supplier,
-            purchases: activePurchases,
+            purchases: enrichedPurchases,
             payments,
-            purchasedUnits: unitsRes.data,
+            purchasedUnits,
         };
     }
 }

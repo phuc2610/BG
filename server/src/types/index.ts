@@ -663,10 +663,12 @@ export interface DashboardStats {
   totalRevenue: number;   // Doanh thu từ đơn đã chốt
   totalCost: number;      // Giá vốn từ đơn đã chốt
   totalProfit: number;    // Tiền lời
+  profitMargin?: number;
   byCategory: Record<string, number>;
   byCondition: Record<string, number>;
   recentInventory: IInventoryItem[];
 }
+
 
 export interface InvoiceStats {
   totalRevenue: number;

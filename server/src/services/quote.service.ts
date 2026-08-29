@@ -372,7 +372,7 @@ export class QuoteService {
     const afterDiscount = Math.max(0, rawSubtotal - totalDiscountAmount);
     const vatAmount = vatEnabled ? (afterDiscount * vatPercent) / 100 : 0;
     const grandTotal = afterDiscount + shippingFee + vatAmount;
-    const profit = grandTotal - totalCost;
+    const profit = (grandTotal - vatAmount) - totalCost;
 
     return {
       subtotal: rawSubtotal,

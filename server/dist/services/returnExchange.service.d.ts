@@ -65,4 +65,9 @@ export declare class ReturnExchangeService {
         };
     }>;
 }
+/**
+ * Deterministically recalculates active total cost and realized profit for an invoice,
+ * taking into account all original line costs, returned items, and exchanged items.
+ */
+export declare function recalculateInvoiceFinancials(invoice: any, session?: mongoose.ClientSession): Promise<void>;
 //# sourceMappingURL=returnExchange.service.d.ts.map

@@ -45,11 +45,24 @@ export class ProductService {
     model: string;
     description?: string;
     specs?: any;
+    imageUrl?: string;
+    imagePublicId?: string;
+    images?: any[];
     createdBy?: string;
   }) {
     const productId = await generateProductId();
     const productCode = await generateProductCode(data.category);
     const barcode = `NPC${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    const initialImages = data.images || [];
+    if (data.imageUrl && initialImages.length === 0) {
+      initialImages.push({
+        url: data.imageUrl,
+        publicId: data.imagePublicId || `img_${Date.now()}`,
+        isThumbnail: true,
+        order: 0,
+      });
+    }
 
     const product = await productRepo.create({
       productId,
@@ -61,7 +74,7 @@ export class ProductService {
       modelName: data.model,
       description: data.description,
       specs: data.specs || {},
-      images: [],
+      images: initialImages,
     } as any);
 
     return product;

@@ -19,5 +19,6 @@ router.post('/:id/cancel', (0, middleware_1.requirePermission)('invoice.cancel')
 router.post('/:id/return', (0, middleware_1.requirePermission)('invoice.edit'), (req, res, next) => controller.processReturn(req, res, next));
 router.post('/:id/exchange', (0, middleware_1.requirePermission)('invoice.edit'), (req, res, next) => controller.processExchange(req, res, next));
 router.get('/:id/return-exchange-history', (0, middleware_1.requirePermission)('invoice.view'), (req, res, next) => controller.getReturnExchangeHistory(req, res, next));
+router.get('/:id/origin-details', (0, middleware_1.requirePermission)('invoice.view'), (req, res, next) => controller.getOriginDetails(req, res, next));
 exports.default = router;
 //# sourceMappingURL=invoice.routes.js.map

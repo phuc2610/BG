@@ -44,5 +44,18 @@ export declare class InvoiceService {
      * Cancels invoice and releases reserved serials if draft.
      */
     cancel(id: string, reason?: string): Promise<IInvoiceDocument>;
+    /**
+     * Retrieves complete purchase origin tracking for all items in an invoice.
+     * Handles items with Serial Numbers, items without Serial Numbers (bulk/accessories),
+     * and queries matched Purchase Receipts / Inventory Units.
+     */
+    getOriginDetails(invoiceId: string): Promise<{
+        itemIndex: number;
+        productId: any;
+        productCode: string;
+        productName: string;
+        quantity: number;
+        origins: any[];
+    }[]>;
 }
 //# sourceMappingURL=invoice.service.d.ts.map

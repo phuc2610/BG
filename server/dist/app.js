@@ -27,17 +27,27 @@ const debt_routes_1 = __importDefault(require("./routes/debt.routes"));
 const supplier_routes_1 = __importDefault(require("./routes/supplier.routes"));
 const purchase_routes_1 = __importDefault(require("./routes/purchase.routes"));
 const inventoryUnit_routes_1 = __importDefault(require("./routes/inventoryUnit.routes"));
+const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
 const auth_middleware_1 = require("./middleware/auth.middleware");
 const app = (0, express_1.default)();
-// Middleware
-app.use((0, helmet_1.default)({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use((0, helmet_1.default)({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'", "*"],
+            imgSrc: ["'self'", "data:", "blob:", "https:", "*"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "*"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https:", "*"],
+        },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use((0, cors_1.default)({ origin: config_1.config.clientUrl, credentials: true }));
 app.use((0, morgan_1.default)('dev'));
 app.use((0, cookie_parser_1.default)());
 // Serve uploaded images statically
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express_1.default.json({ limit: '50mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
 // Public Auth & Admin routes
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/admin', admin_routes_1.default);
@@ -53,6 +63,7 @@ app.use('/api/purchases', auth_middleware_1.authenticateUser, purchase_routes_1.
 app.use('/api/debts', auth_middleware_1.authenticateUser, debt_routes_1.default);
 app.use('/api/dashboard', auth_middleware_1.authenticateUser, dashboard_routes_1.default);
 app.use('/api/settings', auth_middleware_1.authenticateUser, settings_routes_1.default);
+app.use('/api/ai', auth_middleware_1.authenticateUser, ai_routes_1.default);
 app.use('/api/pdf', pdf_routes_1.default);
 // Health check
 app.get('/api/health', (_req, res) => {

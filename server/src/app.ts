@@ -24,19 +24,31 @@ import debtRoutes from './routes/debt.routes';
 import supplierRoutes from './routes/supplier.routes';
 import purchaseRoutes from './routes/purchase.routes';
 import inventoryUnitRoutes from './routes/inventoryUnit.routes';
+import aiRoutes from './routes/ai.routes';
 import { authenticateUser } from './middleware/auth.middleware';
 
 const app = express();
 
-// Middleware
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'", "*"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "*"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "*"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https:", "*"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(cors({ origin: config.clientUrl, credentials: true }));
 app.use(morgan('dev'));
 app.use(cookieParser());
 // Serve uploaded images statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Public Auth & Admin routes
 app.use('/api/auth', authRoutes);
@@ -54,6 +66,7 @@ app.use('/api/purchases', authenticateUser, purchaseRoutes);
 app.use('/api/debts', authenticateUser, debtRoutes);
 app.use('/api/dashboard', authenticateUser, dashboardRoutes);
 app.use('/api/settings', authenticateUser, settingsRoutes);
+app.use('/api/ai', authenticateUser, aiRoutes);
 app.use('/api/pdf', pdfRoutes);
 
 // Health check

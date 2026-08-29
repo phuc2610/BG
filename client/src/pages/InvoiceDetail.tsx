@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { cn, formatCurrency, formatDate, invoiceStatusColors } from '@/lib/utils';
 import { InvoiceStatus, PaymentMethod } from '@/types';
@@ -10,6 +10,7 @@ import {
   User, Calendar, DollarSign, Package, CheckCircle2, Clock,
   AlertCircle, ShieldCheck, X, Loader2, Save, Trash2, Tag, ExternalLink,
   Check, Lock, CheckSquare, RotateCcw, ArrowRightLeft,
+  Truck, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { ReturnExchangeModal } from '@/components/invoice/ReturnExchangeModal';
 
@@ -26,6 +27,17 @@ export function InvoiceDetail() {
   const [loadingSerials, setLoadingSerials] = useState(false);
   const [savingSerials, setSavingSerials] = useState(false);
 
+  // Serial Units Purchase Info Map (serialNumber -> InventoryUnitRecord)
+  const [serialUnitsMap, setSerialUnitsMap] = useState<Record<string, InventoryUnitRecord>>({});
+  // Item Origin Tracking Details (itemIndex -> array of origins)
+  const [itemOriginsMap, setItemOriginsMap] = useState<Record<number, any[]>>({});
+  // Expanded accordions for items to view purchase details
+  const [expandedSerialItems, setExpandedSerialItems] = useState<Record<number, boolean>>({});
+
+  const toggleExpandSerialItem = (idx: number) => {
+    setExpandedSerialItems((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
   // Finalize Invoice State
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [finalizePaid, setFinalizePaid] = useState<number>(0);
@@ -40,13 +52,33 @@ export function InvoiceDetail() {
   const [showReturnExchangeModal, setShowReturnExchangeModal] = useState(false);
   const [returnHistory, setReturnHistory] = useState<IReturnExchangeTransaction[]>([]);
 
+  const fetchSerialUnits = useCallback(async (serials: string[]) => {
+    const validSerials = Array.from(new Set(serials.filter(Boolean)));
+    if (validSerials.length === 0) return;
+    try {
+      const res = await api.post('/inventory-units/by-serials', { serials: validSerials });
+      if (res.data.success && Array.isArray(res.data.data)) {
+        const newMap: Record<string, InventoryUnitRecord> = {};
+        res.data.data.forEach((u: InventoryUnitRecord) => {
+          if (u.serialNumber) {
+            newMap[u.serialNumber] = u;
+          }
+        });
+        setSerialUnitsMap((prev) => ({ ...prev, ...newMap }));
+      }
+    } catch (err) {
+      console.error('Error fetching serial unit details:', err);
+    }
+  }, []);
+
   const fetchInvoice = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const [resInv, resHistory] = await Promise.all([
+      const [resInv, resHistory, resOrigins] = await Promise.all([
         api.get(`/invoices/${id}`),
         api.get(`/invoices/${id}/return-exchange-history`),
+        api.get(`/invoices/${id}/origin-details`).catch(() => ({ data: { success: false, data: [] } })),
       ]);
       setInvoice(resInv.data.data);
       setFinalizePaid(resInv.data.data.totalPaid || 0);
@@ -56,13 +88,30 @@ export function InvoiceDetail() {
       if (resHistory.data.success) {
         setReturnHistory(resHistory.data.data);
       }
+      if (resOrigins.data.success && Array.isArray(resOrigins.data.data)) {
+        const map: Record<number, any[]> = {};
+        resOrigins.data.data.forEach((obj: any) => {
+          map[obj.itemIndex] = obj.origins || [];
+        });
+        setItemOriginsMap(map);
+      }
+
+      // Collect all serials across items and fetch purchase info
+      const allSerials = (resInv.data.data.items || []).flatMap((it: InvoiceItem) =>
+        it.selectedSerials && it.selectedSerials.length > 0
+          ? it.selectedSerials
+          : it.serialNumber ? [it.serialNumber] : []
+      );
+      if (allSerials.length > 0) {
+        fetchSerialUnits(allSerials);
+      }
     } catch {
       toast.error('Không thể tải thông tin hóa đơn');
       navigate('/invoices');
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, fetchSerialUnits]);
 
   useEffect(() => {
     fetchInvoice();
@@ -124,6 +173,11 @@ export function InvoiceDetail() {
       if (res.data.success) {
         toast.success(`Đã cập nhật ${selectedSerials.length}/${item.quantity} Serial cho sản phẩm`);
         setInvoice(res.data.data);
+        if (selectedSerials.length > 0) {
+          fetchSerialUnits(selectedSerials);
+          // Auto-expand purchase origin info so the user sees the purchase code immediately
+          setExpandedSerialItems((prev) => ({ ...prev, [activeItemIndex]: true }));
+        }
         setActiveItemIndex(null);
       }
     } catch (err: any) {
@@ -406,82 +460,252 @@ export function InvoiceDetail() {
               <tbody className="divide-y divide-[rgb(var(--border))]">
                 {invoice.items.map((item, idx) => {
                   const selectedCount = (item.selectedSerials || []).length;
+                  const itemSerials =
+                    item.selectedSerials && item.selectedSerials.length > 0
+                      ? item.selectedSerials
+                      : item.serialNumber
+                      ? [item.serialNumber]
+                      : [];
 
                   return (
-                    <tr key={idx} className="hover:bg-[rgb(var(--accent))]/50">
-                      <td className="px-4 py-3 font-mono text-[rgb(var(--muted-foreground))]">{idx + 1}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-[rgb(var(--muted))] overflow-hidden flex-shrink-0">
-                            {item.productSnapshot.imageUrl ? (
-                              <img src={item.productSnapshot.imageUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package className="w-4 h-4 opacity-30" />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-semibold text-sm">{item.productSnapshot.name}</p>
-                              {item.itemStatus === 'RETURNED' && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                  [ĐÃ TRẢ]
-                                </span>
-                              )}
-                              {item.itemStatus === 'EXCHANGED' && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                                  [ĐÃ ĐỔI]
-                                </span>
+                    <Fragment key={idx}>
+                      <tr className="hover:bg-[rgb(var(--accent))]/50 transition-colors">
+                        <td className="px-4 py-3 font-mono text-[rgb(var(--muted-foreground))]">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-[rgb(var(--muted))] overflow-hidden flex-shrink-0">
+                              {item.productSnapshot.imageUrl ? (
+                                <img src={item.productSnapshot.imageUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Package className="w-4 h-4 opacity-30" />
+                                </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="font-mono text-[11px] text-blue-500">{item.productSnapshot.productCode}</span>
-                              {item.serialNumber && (
-                                <span className="font-mono text-[11px] text-[rgb(var(--muted-foreground))]">
-                                  • S/N: {item.serialNumber}
-                                </span>
-                              )}
-                              {isDraft && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenSerialModal(idx)}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                                    selectedCount > 0
-                                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                                  }`}
-                                >
-                                  {selectedCount > 0 ? `✓ Serial (${selectedCount}/${item.quantity})` : `+ Chọn Serial (tùy chọn)`}
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Exchanged Target Item Details Sub-Row */}
-                            {item.itemStatus === 'EXCHANGED' && item.exchangedToItem && (
-                              <div className="mt-1.5 p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300 flex items-center gap-2">
-                                <span>↓ Đổi sang:</span>
-                                <strong className="text-white">{item.exchangedToItem.productName}</strong>
-                                {item.exchangedToItem.serialNumber && (
-                                  <span className="font-mono text-[10px] text-purple-400">
-                                    (S/N: {item.exchangedToItem.serialNumber})
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-sm">{item.productSnapshot.name}</p>
+                                {item.itemStatus === 'RETURNED' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    [ĐÃ TRẢ]
                                   </span>
                                 )}
-                                <span>• Giá: {formatCurrency(item.exchangedToItem.unitPrice)}</span>
+                                {item.itemStatus === 'EXCHANGED' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                    [ĐÃ ĐỔI]
+                                  </span>
+                                )}
                               </div>
-                            )}
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="font-mono text-[11px] text-blue-500">{item.productSnapshot.productCode}</span>
+                                {item.serialNumber && (
+                                  <span className="font-mono text-[11px] text-[rgb(var(--muted-foreground))]">
+                                    • S/N: {item.serialNumber}
+                                  </span>
+                                )}
+                                {isDraft && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSerialModal(idx)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                      selectedCount > 0
+                                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                        : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                    }`}
+                                  >
+                                    {selectedCount > 0 ? `✓ Serial (${selectedCount}/${item.quantity})` : `+ Chọn Serial / Đơn Nhập`}
+                                  </button>
+                                )}
+
+                                {/* Nguồn gốc nhập button (always visible for all items) */}
+                                {(() => {
+                                  const origins = itemOriginsMap[idx] || [];
+                                  const hasSerials = itemSerials.length > 0;
+                                  const hasOrigins = origins.length > 0;
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandSerialItem(idx)}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all inline-flex items-center gap-1 shadow-sm ${
+                                        expandedSerialItems[idx]
+                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold'
+                                          : 'bg-[rgb(var(--muted))] text-[rgb(var(--foreground))] hover:bg-emerald-500/10 hover:text-emerald-400 border border-[rgb(var(--border))]'
+                                      }`}
+                                      title="Xem chi tiết nguồn gốc nhập kho của sản phẩm này"
+                                    >
+                                      <Truck className="w-3 h-3 text-emerald-400" />
+                                      <span>
+                                        {hasSerials
+                                          ? `Nguồn gốc nhập (${itemSerials.length} Serial)`
+                                          : hasOrigins
+                                          ? `Nguồn gốc nhập (${origins.length > 1 ? `${origins.length} đơn` : origins[0]?.purchaseCode || 'Phiếu nhập'})`
+                                          : 'Nguồn gốc nhập'}
+                                      </span>
+                                      {expandedSerialItems[idx] ? (
+                                        <ChevronUp className="w-3 h-3 text-emerald-400" />
+                                      ) : (
+                                        <ChevronDown className="w-3 h-3 text-[rgb(var(--muted-foreground))]" />
+                                      )}
+                                    </button>
+                                  );
+                                })()}
+                              </div>
+
+                              {/* Exchanged Target Item Details Sub-Row */}
+                              {item.itemStatus === 'EXCHANGED' && item.exchangedToItem && (
+                                <div className="mt-1.5 p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300 flex items-center gap-2">
+                                  <span>↓ Đổi sang:</span>
+                                  <strong className="text-white">{item.exchangedToItem.productName}</strong>
+                                  {item.exchangedToItem.serialNumber && (
+                                    <span className="font-mono text-[10px] text-purple-400">
+                                      (S/N: {item.exchangedToItem.serialNumber})
+                                    </span>
+                                  )}
+                                  <span>• Giá: {formatCurrency(item.exchangedToItem.unitPrice)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-teal-500/10 text-teal-600 border border-teal-500/20">
-                          {item.warranty}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
-                      <td className="px-4 py-3 text-center font-bold">{item.quantity}</td>
-                      <td className="px-4 py-3 text-right font-bold text-[rgb(var(--foreground))]">{formatCurrency(item.total)}</td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-teal-500/10 text-teal-600 border border-teal-500/20">
+                            {item.warranty}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
+                        <td className="px-4 py-3 text-center font-bold">{item.quantity}</td>
+                        <td className="px-4 py-3 text-right font-bold text-[rgb(var(--foreground))]">{formatCurrency(item.total)}</td>
+                      </tr>
+
+                      {/* Accordion Sub-Row: Purchase Origin Details of Selected Serials / Batches */}
+                      {expandedSerialItems[idx] && (
+                        <tr className="bg-[rgb(var(--muted))]/20 border-b border-[rgb(var(--border))]">
+                          <td colSpan={6} className="p-3 pl-6 sm:pl-12">
+                            <div className="p-3.5 rounded-xl bg-[rgb(var(--card))] border border-emerald-500/20 shadow-sm space-y-2.5">
+                              {(() => {
+                                const origins = itemOriginsMap[idx] || [];
+
+                                return (
+                                  <>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                                      <div className="flex items-center gap-2 font-bold text-emerald-500">
+                                        <Truck className="w-4 h-4" />
+                                        <span>
+                                          Thông Tin Nguồn Gốc Nhập Kho (
+                                          {itemSerials.length > 0
+                                            ? `${itemSerials.length} Serial`
+                                            : origins.length > 0
+                                            ? `${origins.length} Đơn vị / Đợt nhập`
+                                            : 'Sản phẩm không dùng S/N'}
+                                          ):
+                                        </span>
+                                      </div>
+                                      <span className="text-[11px] text-[rgb(var(--muted-foreground))]">
+                                        Click vào <strong className="text-blue-400 font-mono">Mã Nhập Kho</strong> để nhảy ra phiếu nhập kho đó
+                                      </span>
+                                    </div>
+
+                                    {origins.length === 0 ? (
+                                      <div className="p-4 text-center text-xs text-[rgb(var(--muted-foreground))] bg-[rgb(var(--muted))/30] rounded-xl">
+                                        Đang tra cứu dữ liệu nguồn gốc nhập kho của sản phẩm này...
+                                      </div>
+                                    ) : (
+                                      <div className="overflow-x-auto rounded-lg border border-[rgb(var(--border))]">
+                                        <table className="w-full text-left text-xs">
+                                          <thead className="bg-[rgb(var(--muted))]/60 text-[10px] uppercase font-semibold text-[rgb(var(--muted-foreground))] border-b border-[rgb(var(--border))]">
+                                            <tr>
+                                              <th className="px-3 py-2">Mã Nhập Kho</th>
+                                              <th className="px-3 py-2">Serial Number</th>
+                                              <th className="px-3 py-2">Nhà Cung Cấp</th>
+                                              <th className="px-3 py-2">Ngày Nhập</th>
+                                              <th className="px-3 py-2 text-right">Giá Nhập</th>
+                                              <th className="px-3 py-2 text-right">Giá Niêm Yết</th>
+                                              <th className="px-3 py-2">Tình Trạng</th>
+                                              <th className="px-3 py-2">Bảo Hành NCC</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-[rgb(var(--border))]">
+                                            {origins.map((orig: any, origIdx: number) => {
+                                              return (
+                                                <tr key={origIdx} className="hover:bg-[rgb(var(--accent))]/30 transition-colors">
+                                                  <td className="px-3 py-2">
+                                                    {orig.purchaseCode && orig.purchaseCode !== 'PNK (Chưa gán)' ? (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                          navigate(
+                                                            `/purchases?search=${encodeURIComponent(
+                                                              orig.purchaseCode || ''
+                                                            )}`
+                                                          )
+                                                        }
+                                                        className="font-mono font-bold text-xs text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1.5 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20 group transition-all"
+                                                        title="Click để nhảy ra phiếu nhập kho này"
+                                                      >
+                                                        <Truck className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
+                                                        <span>{orig.purchaseCode}</span>
+                                                        <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                                      </button>
+                                                    ) : (
+                                                      <span className="text-[rgb(var(--muted-foreground))] italic text-[11px]">—</span>
+                                                    )}
+                                                  </td>
+                                                  <td className="px-3 py-2 font-mono font-bold text-emerald-400">
+                                                    {orig.serialNumber || '— (Không có S/N)'}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-[rgb(var(--foreground))]">
+                                                    {orig.supplierName || 'NCC N/A'}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-[rgb(var(--muted-foreground))]">
+                                                    {formatDate(orig.purchaseDate)}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-right font-semibold text-[rgb(var(--foreground))]">
+                                                    {formatCurrency(orig.purchasePrice || 0)}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-right font-medium text-emerald-500">
+                                                    {formatCurrency(orig.listPrice || 0)}
+                                                  </td>
+                                                  <td className="px-3 py-2">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                                      {orig.condition || 'New'}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-2">
+                                                    <div>{orig.supplierWarrantyMonths || 0} tháng</div>
+                                                    {orig.remainingWarrantyDays !== undefined && (
+                                                      <div className="mt-0.5">
+                                                        <span
+                                                          className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                                            orig.remainingWarrantyDays <= 0
+                                                              ? 'bg-red-500/10 text-red-500'
+                                                              : orig.remainingWarrantyDays <= 30
+                                                              ? 'bg-amber-500/10 text-amber-500'
+                                                              : 'bg-emerald-500/10 text-emerald-500'
+                                                          }`}
+                                                        >
+                                                          {orig.remainingWarrantyDays <= 0
+                                                            ? 'Hết BH'
+                                                            : `Còn ${orig.remainingWarrantyDays}d`}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -521,9 +745,9 @@ export function InvoiceDetail() {
                   <span>Giá vốn linh kiện đã xuất kho:</span>
                   <span className="font-semibold text-[rgb(var(--foreground))]">{formatCurrency(invoice.totalCost || 0)}</span>
                 </div>
-                <div className="flex justify-between text-xs font-bold text-emerald-500 pt-1 border-t border-emerald-500/20">
+                <div className={`flex justify-between text-xs font-bold pt-1 border-t border-emerald-500/20 ${(invoice.profit || 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   <span>Lợi Nhuận Gộp Đơn Hàng:</span>
-                  <span>+{formatCurrency(invoice.profit || 0)}</span>
+                  <span>{(invoice.profit || 0) > 0 ? `+${formatCurrency(invoice.profit || 0)}` : formatCurrency(invoice.profit || 0)}</span>
                 </div>
               </div>
             )}
@@ -663,13 +887,61 @@ export function InvoiceDetail() {
                   Đang tải danh sách Serial khả dụng từ kho...
                 </div>
               ) : availableSerials.filter((u) => Boolean(u.serialNumber)).length === 0 ? (
-                <div className="p-6 text-center space-y-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                  <div className="text-xs text-blue-600 font-bold">
-                    ℹ️ Sản phẩm này không đăng ký Serial trong kho (nhập kho không theo Serial).
+                <div className="space-y-3">
+                  <div className="p-4 space-y-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                    <div className="text-xs text-blue-400 font-bold flex items-center gap-1.5">
+                      <Truck className="w-4 h-4" />
+                      <span>Sản phẩm quản lý theo số lượng (Không dùng Serial riêng)</span>
+                    </div>
+                    <p className="text-[11px] text-[rgb(var(--muted-foreground))] leading-relaxed">
+                      Sản phẩm này nhập kho không theo từng Serial. Khi bấm <strong>CHỐT HÓA ĐƠN</strong>, hệ thống sẽ tự động trừ số lượng tồn kho khả dụng và liên kết nguồn nhập từ các phiếu nhập kho dưới đây:
+                    </p>
                   </div>
-                  <p className="text-[11px] text-[rgb(var(--muted-foreground))] leading-relaxed">
-                    Bạn không bắt buộc phải chọn Serial. Khi bấm <strong>CHỐT HÓA ĐƠN</strong>, hệ thống sẽ tự động trừ số lượng tồn kho khả dụng của sản phẩm này.
-                  </p>
+
+                  {availableSerials.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-[rgb(var(--foreground))]">
+                        Các đợt nhập kho khả dụng trong hệ thống ({availableSerials.length} đơn vị tồn):
+                      </div>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {availableSerials.map((u, i) => (
+                          <div
+                            key={u._id || i}
+                            className="p-2.5 rounded-lg bg-[rgb(var(--background))] border border-[rgb(var(--border))] flex items-center justify-between text-xs hover:border-blue-500/50 transition-all"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-blue-400">{u.purchaseCode || 'PNK'}</span>
+                                <span className="text-[rgb(var(--foreground))] font-semibold">
+                                  NCC: {u.supplierName || 'N/A'}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold">
+                                  {u.condition || 'New'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-[rgb(var(--muted-foreground))] mt-0.5">
+                                Ngày nhập: {formatDate(u.purchaseDate)} • Giá vốn: {formatCurrency(u.purchasePrice || 0)} • BH NCC: {u.supplierWarrantyMonths || 0} tháng
+                              </div>
+                            </div>
+                            {u.purchaseCode && (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/purchases?search=${encodeURIComponent(u.purchaseCode || '')}`)}
+                                className="px-2 py-1 rounded text-[11px] font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 inline-flex items-center gap-1"
+                              >
+                                <span>Xem phiếu</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 text-center text-xs text-[rgb(var(--muted-foreground))] italic bg-[rgb(var(--muted))/20] rounded-lg">
+                      Không tìm thấy tồn kho khả dụng từ phiếu nhập cho sản phẩm này.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">

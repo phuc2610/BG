@@ -10,8 +10,9 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useDropzone } from 'react-dropzone';
 import {
-  ArrowLeft, Save, Upload, Loader2, Trash2, Settings2, Package,
+  ArrowLeft, Save, Upload, Loader2, Trash2, Settings2, Package, Sparkles,
 } from 'lucide-react';
+import { ProductAiImagePicker } from '@/components/shared/ProductAiImagePicker';
 
 const masterProductSchema = z.object({
   name: z.string().min(1, 'Tên linh kiện là bắt buộc'),
@@ -44,12 +45,14 @@ export function ProductForm() {
   const isEdit = !!id;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [primaryImageUrl, setPrimaryImageUrl] = useState<string>('');
   const [images, setImages] = useState<ProductImage[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [showAllSpecs, setShowAllSpecs] = useState(false);
+  const [suggestingSpecs, setSuggestingSpecs] = useState(false);
 
   const {
-    register, handleSubmit, reset, formState: { errors }, watch,
+    register, handleSubmit, reset, formState: { errors }, watch, setValue,
   } = useForm<MasterProductFormData>({
     resolver: zodResolver(masterProductSchema),
     defaultValues: {
@@ -59,6 +62,39 @@ export function ProductForm() {
   });
 
   const selectedCategory = watch('category');
+
+  const handleAiSuggestSpecs = async () => {
+    const name = watch('name');
+    if (!name || !name.trim()) {
+      toast.error('Vui lòng nhập Tên linh kiện trước khi yêu cầu Gemini gợi ý thông số!');
+      return;
+    }
+
+    setSuggestingSpecs(true);
+    try {
+      const res = await api.post('/ai/suggest-specs', {
+        name: name.trim(),
+        category: watch('category'),
+      });
+      if (res.data.success && res.data.data) {
+        const d = res.data.data;
+        if (d.brand) setValue('brand', d.brand);
+        if (d.model) setValue('model', d.model);
+        if (d.description) setValue('description', d.description);
+        if (d.specs) {
+          Object.keys(d.specs).forEach((k) => {
+            if (d.specs[k]) setValue(`specs.${k}` as any, d.specs[k]);
+          });
+        }
+        setShowAllSpecs(true);
+        toast.success('✨ Google Gemini đã tự động điền Thông số & Hãng sản xuất!');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Lỗi gợi ý thông số từ Gemini');
+    } finally {
+      setSuggestingSpecs(false);
+    }
+  };
 
   useEffect(() => {
     if (isEdit) fetchProduct();
@@ -77,7 +113,10 @@ export function ProductForm() {
         description: product.description,
         specs: product.specs || {},
       });
-      setImages(product.images || []);
+      const imgs = product.images || [];
+      setImages(imgs);
+      const thumb = imgs.find((img: any) => img.isThumbnail) || imgs[0];
+      if (thumb?.url) setPrimaryImageUrl(thumb.url);
     } catch {
       toast.error('Không thể tải mã sản phẩm');
       navigate('/products');
@@ -89,11 +128,21 @@ export function ProductForm() {
   const onSubmit = async (data: MasterProductFormData) => {
     setSaving(true);
     try {
+      const payload: any = {
+        ...data,
+        imageUrl: primaryImageUrl || undefined,
+        images: isEdit
+          ? images
+          : primaryImageUrl
+          ? [{ url: primaryImageUrl, publicId: `img_${Date.now()}`, isThumbnail: true, order: 0 }]
+          : [],
+      };
+
       if (isEdit) {
-        await api.put(`/products/${id}`, data);
+        await api.put(`/products/${id}`, payload);
         toast.success('Đã cập nhật Mã sản phẩm');
       } else {
-        const res = await api.post('/products', data);
+        const res = await api.post('/products', payload);
         toast.success('Đã tạo Mã sản phẩm mới thành công');
         navigate(`/products/${res.data.data._id}`);
       }
@@ -195,7 +244,24 @@ export function ProductForm() {
         <Section title="Thông tin định danh Mã sản phẩm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className={labelClass}>Tên linh kiện / Mã sản phẩm *</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium text-[rgb(var(--foreground))]">
+                  Tên linh kiện / Mã sản phẩm *
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAiSuggestSpecs}
+                  disabled={suggestingSpecs}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {suggestingSpecs ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  )}
+                  <span>{suggestingSpecs ? 'Đang phân tích Gemini...' : '✨ AI Gợi ý Specs (Gemini)'}</span>
+                </button>
+              </div>
               <input {...register('name')} className={inputClass} placeholder="VD: CPU Intel Core i7-10700" />
               {errors.name && <p className={errorClass}>{errors.name.message}</p>}
             </div>
@@ -218,6 +284,37 @@ export function ProductForm() {
               {errors.model && <p className={errorClass}>{errors.model.message}</p>}
             </div>
           </div>
+        </Section>
+
+        {/* Ảnh đại diện & Tạo ảnh AI */}
+        <Section title="Ảnh đại diện & Tạo ảnh tự động AI (OpenAI DALL-E)">
+          <ProductAiImagePicker
+            imageUrl={primaryImageUrl}
+            onChange={(url, publicId) => {
+              setPrimaryImageUrl(url);
+              if (url) {
+                setImages((prev) => {
+                  const withoutThumb = prev.map((img) => ({ ...img, isThumbnail: false }));
+                  return [
+                    {
+                      _id: `img_${Date.now()}`,
+                      url,
+                      publicId: publicId || `img_${Date.now()}`,
+                      isThumbnail: true,
+                      order: 0,
+                    },
+                    ...withoutThumb,
+                  ];
+                });
+              } else {
+                setImages([]);
+              }
+            }}
+            productName={watch('name')}
+            category={watch('category')}
+            brand={watch('brand')}
+            model={watch('model')}
+          />
         </Section>
 
         {/* Specs */}

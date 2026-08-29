@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReturnExchangeService = void 0;
+exports.recalculateInvoiceFinancials = recalculateInvoiceFinancials;
 const mongoose_1 = __importDefault(require("mongoose"));
 const models_1 = require("../models");
 const types_1 = require("../types");
@@ -154,13 +155,6 @@ class ReturnExchangeService {
             }
             // Adjust invoice remaining amount
             invoice.remainingAmount = Math.max(0, invoice.remainingAmount - totalDebtReduction);
-            // Profit adjustment:
-            // Returned item is back in stock => Cost is 0 out of COGS. Profit for returned item = retainedAmount.
-            // Net Profit Adjustment = totalRetainedAmount - (originalSalesForReturnedItems - originalCostForReturnedItems)
-            const originalReturnedProfit = totalOriginalValue - totalCostOfReturnedUnits;
-            const profitAdjustment = totalRetainedAmount - originalReturnedProfit;
-            // Update invoice realized profit
-            invoice.profit = Math.max(0, (invoice.profit || 0) + profitAdjustment);
             // Update invoice status
             const allItemsCount = invoice.items.length;
             const returnedCount = invoice.items.filter((i) => i.itemStatus === 'RETURNED').length;
@@ -187,7 +181,7 @@ class ReturnExchangeService {
                 totalRetainedAmount,
                 totalCustomerPaidExtra: 0,
                 totalCustomerDebtAdded: 0,
-                profitAdjustment,
+                profitAdjustment: totalRetainedAmount - (totalOriginalValue - totalCostOfReturnedUnits),
                 reason: data.reason,
                 notes: data.notes,
                 createdBy,
@@ -197,6 +191,8 @@ class ReturnExchangeService {
             for (const reqItem of data.items) {
                 invoice.items[reqItem.order].returnExchangeTxId = tx._id;
             }
+            // Recalculate exact totalCost and profit
+            await recalculateInvoiceFinancials(invoice, session);
             invoice.history.push({
                 action: 'TRẢ_HÀNG',
                 description: `Thực hiện TRẢ HÀNG [${transactionCode}]: ${returnedItemsLog.length} sản phẩm (Hoàn tiền: ${totalRefundAmount.toLocaleString('vi-VN')}đ, Giảm nợ: ${totalDebtReduction.toLocaleString('vi-VN')}đ, Giữ lại: ${totalRetainedAmount.toLocaleString('vi-VN')}đ)`,
@@ -484,6 +480,8 @@ class ReturnExchangeService {
             for (const exReq of data.exchanges) {
                 invoice.items[exReq.order].returnExchangeTxId = tx._id;
             }
+            // Recalculate exact totalCost and profit
+            await recalculateInvoiceFinancials(invoice, session);
             invoice.history.push({
                 action: 'ĐỔI_HÀNG',
                 description: `Thực hiện ĐỔI HÀNG [${transactionCode}]: ${exchangedItemsLog.length} sản phẩm (Khách bù: ${totalPaidExtra.toLocaleString('vi-VN')}đ, Nợ thêm: ${totalDebtAdded.toLocaleString('vi-VN')}đ, Hoàn tiền: ${totalRefundAmount.toLocaleString('vi-VN')}đ)`,
@@ -523,4 +521,88 @@ class ReturnExchangeService {
     }
 }
 exports.ReturnExchangeService = ReturnExchangeService;
+/**
+ * Deterministically recalculates active total cost and realized profit for an invoice,
+ * taking into account all original line costs, returned items, and exchanged items.
+ */
+async function recalculateInvoiceFinancials(invoice, session) {
+    let activeTotalCost = 0;
+    let activeNetRevenue = 0;
+    // Fetch all return & exchange transactions for this invoice
+    const transactions = await models_1.ReturnExchangeTransaction.find({ invoiceId: invoice._id }).session(session || null).exec();
+    for (let idx = 0; idx < invoice.items.length; idx++) {
+        const item = invoice.items[idx];
+        const itemStatus = item.itemStatus || 'SOLD';
+        const originalSalePrice = item.total !== undefined ? item.total : (item.unitPrice * item.quantity - (item.discount || 0));
+        // Calculate actual cost for this item line (using InventoryUnit purchasePrice as highest priority!)
+        let itemCostPrice = 0;
+        const selectedSerials = (item.selectedSerials || []).filter((s) => s && s.trim());
+        if (selectedSerials.length > 0) {
+            const units = await models_1.InventoryUnit.find({ serialNumber: { $in: selectedSerials } }).session(session || null).exec();
+            if (units.length > 0) {
+                const foundUnitCost = units.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+                const missingQty = Math.max(0, item.quantity - units.length);
+                const fallbackUnitCost = Number(item.productSnapshot?.costPrice) || 0;
+                itemCostPrice = foundUnitCost + (missingQty * fallbackUnitCost);
+            }
+            else {
+                const fallbackUnitCost = Number(item.productSnapshot?.costPrice) || 0;
+                itemCostPrice = fallbackUnitCost * item.quantity;
+            }
+        }
+        else {
+            let productId = item.productId || item.productSnapshot?.productId || item.productSnapshot?._id;
+            let unitCost = 0;
+            if (productId) {
+                const unit = await models_1.InventoryUnit.findOne({ productId, purchasePrice: { $gt: 0 } }).session(session || null).exec();
+                if (unit && unit.purchasePrice) {
+                    unitCost = unit.purchasePrice;
+                }
+            }
+            if (unitCost === 0) {
+                unitCost = Number(item.productSnapshot?.costPrice) || 0;
+            }
+            itemCostPrice = unitCost * item.quantity;
+        }
+        if (itemStatus === 'SOLD') {
+            activeTotalCost += itemCostPrice;
+            activeNetRevenue += originalSalePrice;
+        }
+        else if (itemStatus === 'RETURNED') {
+            // Returned item => Cost is 0 (returned to inventory). Revenue = retainedAmount
+            const refundAmt = Number(item.refundAmount) || 0;
+            const debtReduct = Number(item.debtReduction) || 0;
+            const retainedAmt = item.retainedAmount !== undefined && item.retainedAmount !== null
+                ? Number(item.retainedAmount)
+                : Math.max(0, originalSalePrice - refundAmt - debtReduct);
+            activeTotalCost += 0;
+            activeNetRevenue += retainedAmt;
+        }
+        else if (itemStatus === 'EXCHANGED') {
+            const ex = item.exchangedToItem;
+            const newCostPrice = Number(ex?.costPrice) || 0;
+            // Find exchange logs for this item order line
+            let customerPaidExtra = 0;
+            let cashRefund = 0;
+            let debtReduction = 0;
+            for (const tx of transactions) {
+                if (tx.type === types_1.ReturnExchangeType.EXCHANGE && tx.exchangedItems) {
+                    const exLog = tx.exchangedItems.find((e) => e.order === idx);
+                    if (exLog) {
+                        customerPaidExtra += Number(exLog.customerPaidExtra) || 0;
+                        cashRefund += Number(exLog.cashRefund) || 0;
+                        debtReduction += Number(exLog.debtReduction) || 0;
+                    }
+                }
+            }
+            activeTotalCost += newCostPrice;
+            const effectiveNetRevenue = originalSalePrice + customerPaidExtra - cashRefund - debtReduction;
+            activeNetRevenue += effectiveNetRevenue;
+        }
+    }
+    // Factor in invoice-level discount and shipping fee
+    const finalRevenue = activeNetRevenue - (invoice.discount || 0) + (invoice.shippingFee || 0);
+    invoice.totalCost = Math.max(0, activeTotalCost);
+    invoice.profit = finalRevenue - invoice.totalCost;
+}
 //# sourceMappingURL=returnExchange.service.js.map

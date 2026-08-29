@@ -38,6 +38,15 @@ class ProductService {
         const productId = await (0, models_1.generateProductId)();
         const productCode = await (0, models_1.generateProductCode)(data.category);
         const barcode = `NPC${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const initialImages = data.images || [];
+        if (data.imageUrl && initialImages.length === 0) {
+            initialImages.push({
+                url: data.imageUrl,
+                publicId: data.imagePublicId || `img_${Date.now()}`,
+                isThumbnail: true,
+                order: 0,
+            });
+        }
         const product = await productRepo.create({
             productId,
             productCode,
@@ -48,7 +57,7 @@ class ProductService {
             modelName: data.model,
             description: data.description,
             specs: data.specs || {},
-            images: [],
+            images: initialImages,
         });
         return product;
     }

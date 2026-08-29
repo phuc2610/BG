@@ -3,6 +3,8 @@ export declare class InventoryUnitController {
     getAll: (req: Request, res: Response, next: NextFunction) => void;
     getGroupedInventory: (req: Request, res: Response, next: NextFunction) => void;
     getGroupedByCondition: (req: Request, res: Response, next: NextFunction) => void;
+    exportExcel: (req: Request, res: Response, next: NextFunction) => void;
+    getUnitsBySerials: (req: Request, res: Response, next: NextFunction) => void;
     getUnitsByProduct: (req: Request, res: Response, next: NextFunction) => void;
     getById: (req: Request, res: Response, next: NextFunction) => void;
     updateCondition: (req: Request, res: Response, next: NextFunction) => void;

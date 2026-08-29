@@ -14,6 +14,10 @@ export declare class PdfService {
      * Extract bank account details from bankInfo text settings
      */
     private parseBankInfo;
+    /**
+     * Resolve relative image paths to full absolute URLs with host domain fallback
+     */
+    private resolveImageUrl;
     private generateQuoteVietQR;
     private generateInvoiceVietQR;
     /**

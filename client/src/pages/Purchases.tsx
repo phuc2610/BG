@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
   Truck,
@@ -24,10 +24,12 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 
 export function Purchases() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlSearch = searchParams.get('search') || '';
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [stats, setStats] = useState<PurchaseStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Modal View Purchase Detail
@@ -62,6 +64,17 @@ export function Purchases() {
 
       if (listRes.data.success) {
         setPurchases(listRes.data.data);
+        const qSearch = searchParams.get('search');
+        if (qSearch && listRes.data.data.length > 0) {
+          const match = listRes.data.data.find(
+            (p: PurchaseRecord) =>
+              p.purchaseCode?.toLowerCase() === qSearch.toLowerCase() ||
+              p._id === qSearch
+          );
+          if (match) {
+            setViewPurchaseDetail(match);
+          }
+        }
       }
       if (statsRes.data.success) {
         setStats(statsRes.data.data);

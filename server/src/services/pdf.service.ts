@@ -139,6 +139,23 @@ export class PdfService {
     };
   }
 
+  /**
+   * Resolve relative image paths to full absolute URLs with host domain fallback
+   */
+  private resolveImageUrl(url?: string): string {
+    if (!url || typeof url !== 'string' || !url.trim()) return '';
+    const trimmed = url.trim();
+
+    if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const baseUrl = (process.env.PUBLIC_URL || process.env.VITE_API_URL || 'https://ngocphieupc.shop').replace(/\/+$/, '');
+    return `${baseUrl}${cleanPath}`;
+  }
+
+
   private generateQuoteVietQR(quote: IQuoteDocument, settings: any) {
     const customerName = quote.customer?.name || '';
     const phonePart = quote.customer?.phone ? ` - ${quote.customer.phone}` : '';
@@ -211,7 +228,13 @@ export class PdfService {
         margin: 0;
         padding: 0;
       }
+      img {
+        font-size: 0px;
+        text-indent: -9999px;
+        color: transparent;
+      }
       body {
+
         font-family: 'Be Vietnam Pro', Arial, sans-serif;
         background: #ffffff;
         color: #14213D;
@@ -638,15 +661,14 @@ export class PdfService {
       }
       .prod-name {
         font-family: 'Be Vietnam Pro', Arial, sans-serif;
-        font-size: 11px;
+        font-size: 10.5px;
         font-weight: 700;
-        line-height: 1.25;
+        line-height: 1.3;
         color: #07152F;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
+        word-break: break-word;
+        overflow-wrap: anywhere;
       }
+
       .prod-code {
         font-family: 'Be Vietnam Pro', Arial, sans-serif;
         font-size: 9px;
@@ -1120,12 +1142,14 @@ export class PdfService {
       )
       .join('');
 
+    const logoUrl = this.resolveImageUrl(settings.logoUrl);
+
     return `
       <div class="doc-header">
         <div class="brand-block">
           <div class="brand-top">
-            ${settings.logoUrl
-        ? `<img src="${settings.logoUrl}" alt="${settings.storeName}" class="brand-logo" />`
+            ${logoUrl
+        ? `<img src="${logoUrl}" alt="${settings.storeName || ''}" class="brand-logo" onerror="this.style.display='none';" />`
         : ''
       }
             <div class="brand-text">
@@ -1152,12 +1176,16 @@ export class PdfService {
     confirmationTitle: string,
     settings: any
   ): string {
+    const thankYouUrl = this.resolveImageUrl(settings.thankYouAssetUrl);
+    const signatureUrl = this.resolveImageUrl(settings.signatureUrl);
+    const stampUrl = this.resolveImageUrl(settings.stampUrl);
+
     return `
       <div class="doc-footer">
         <!-- 1. CẢM ƠN (22%) -->
         <div class="thanks-col">
-          ${settings.thankYouAssetUrl
-            ? `<img src="${settings.thankYouAssetUrl}" alt="Thank you" class="thanks-asset" />`
+          ${thankYouUrl
+            ? `<img src="${thankYouUrl}" alt="" class="thanks-asset" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';" /><div class="thanks-font" style="display:none;">Thank you!</div>`
             : `<div class="thanks-font">Thank you!</div>`
           }
           <div class="thanks-title">CẢM ƠN QUÝ KHÁCH</div>
@@ -1178,12 +1206,13 @@ export class PdfService {
           <div class="confirm-title">${confirmationTitle}</div>
           <div class="confirm-store">${settings.storeName || 'NP Computer'}</div>
           <div class="sign-stamp-wrap">
-            ${settings.signatureUrl ? `<img src="${settings.signatureUrl}" alt="Signature" class="signature-img" />` : ''}
-            ${settings.stampUrl ? `<img src="${settings.stampUrl}" alt="Stamp" class="stamp-img" />` : ''}
+            ${signatureUrl ? `<img src="${signatureUrl}" alt="" class="signature-img" onerror="this.style.display='none';" />` : ''}
+            ${stampUrl ? `<img src="${stampUrl}" alt="" class="stamp-img" onerror="this.style.display='none';" />` : ''}
           </div>
         </div>
       </div>`;
   }
+
 
   /**
    * BUILD BÁO GIÁ HTML
@@ -1191,6 +1220,7 @@ export class PdfService {
   private buildHtml(quote: IQuoteDocument, settings: any, creatorName?: string): string {
     const payment = this.generateQuoteVietQR(quote, settings);
     const amountInWords = numberToWordsVietnamese(quote.grandTotal);
+    const resolvedQrUrl = this.resolveImageUrl(payment.qrUrl);
 
     // Sum discounts
     const itemsDiscountTotal = quote.items.reduce((sum, item) => {
@@ -1219,19 +1249,19 @@ export class PdfService {
           : (item.productSnapshot as any)?.brand || (item as any)?.brand || '';
 
         const serialText = (item as any).serialNumber || (item as any).serial || '';
+        const prodImg = this.resolveImageUrl(item.productSnapshot.imageUrl);
 
         return `
         <tr>
           <td class="td-stt">${index + 1}</td>
           <td class="td-prod">
             <div class="prod-cell">
-              ${item.productSnapshot.imageUrl
-            ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" class="prod-img" />`
+              ${prodImg
+            ? `<img src="${prodImg}" alt="" class="prod-img" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" /><div class="prod-img-placeholder" style="display:none;">NP</div>`
             : `<div class="prod-img-placeholder">NP</div>`
           }
               <div>
                 <div class="prod-name">${item.productSnapshot.name}</div>
-                <div class="prod-code">Mã: ${item.productSnapshot.productCode}</div>
               </div>
             </div>
           </td>
@@ -1271,7 +1301,7 @@ export class PdfService {
           value: this.formatDate(quote.createdDate),
         },
         {
-          iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+          iconSvg: `<svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg>`,
           label: 'Hiệu lực đến',
           value: this.formatDate(validUntilDate),
         },
@@ -1284,6 +1314,7 @@ export class PdfService {
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <base href="https://ngocphieupc.shop/" />
   <title>BÁO GIÁ - ${quote.quoteCode}</title>
   <style>${this.getCommonCss()}</style>
 </head>
@@ -1319,13 +1350,14 @@ export class PdfService {
       <div class="table-container">
         <table class="doc-table">
           <colgroup>
+            <col style="width: 4%;" />
+            <col style="width: 38%;" />
+            <col style="width: 22%;" />
+            <col style="width: 14%;" />
             <col style="width: 5%;" />
-            <col style="width: 30%;" />
-            <col style="width: 25%;" />
-            <col style="width: 13%;" />
-            <col style="width: 7%;" />
-            <col style="width: 20%;" />
+            <col style="width: 17%;" />
           </colgroup>
+
           <thead>
             <tr>
               <th class="col-stt">STT</th>
@@ -1352,8 +1384,9 @@ export class PdfService {
             THANH TOÁN NHANH (VIETQR)
           </div>
           <div class="qr-wrap">
-            ${payment.qrUrl ? `<div class="qr-img-box"><img src="${payment.qrUrl}" alt="VietQR" class="qr-img" /></div>` : ''}
+            ${resolvedQrUrl ? `<div class="qr-img-box"><img src="${resolvedQrUrl}" alt="VietQR" class="qr-img" onerror="this.parentElement.style.display='none';" /></div>` : ''}
             <div class="qr-info">
+
               <div><span class="qr-info-label">Ngân hàng:</span> <span class="qr-info-val">${payment.bankName}</span></div>
               <div><span class="qr-info-label">Chủ TK:</span> <span class="qr-info-val">${payment.accountName}</span></div>
               <div><span class="qr-info-label">Số TK:</span> <span class="qr-acc-no">${payment.accountNo}</span></div>
@@ -1424,6 +1457,7 @@ export class PdfService {
   private buildInvoiceHtml(invoice: IInvoiceDocument, settings: any, creatorName?: string): string {
     const payment = this.generateInvoiceVietQR(invoice, settings);
     const amountInWords = numberToWordsVietnamese(invoice.grandTotal);
+    const resolvedQrUrl = this.resolveImageUrl(payment.qrUrl);
 
     // Sum discounts
     const itemsDiscountTotal = invoice.items.reduce((sum, item) => {
@@ -1456,19 +1490,19 @@ export class PdfService {
         const brandName = typeof (item.productSnapshot as any)?.brand === 'object'
           ? (item.productSnapshot as any)?.brand?.name
           : (item.productSnapshot as any)?.brand || (item as any)?.brand || '';
+        const prodImg = this.resolveImageUrl(item.productSnapshot.imageUrl);
 
         return `
         <tr>
           <td class="td-stt">${index + 1}</td>
           <td class="td-prod">
             <div class="prod-cell">
-              ${item.productSnapshot.imageUrl
-            ? `<img src="${item.productSnapshot.imageUrl}" alt="${item.productSnapshot.name}" class="prod-img" />`
+              ${prodImg
+            ? `<img src="${prodImg}" alt="" class="prod-img" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" /><div class="prod-img-placeholder" style="display:none;">NP</div>`
             : `<div class="prod-img-placeholder">NP</div>`
           }
               <div>
                 <div class="prod-name">${item.productSnapshot.name}</div>
-                <div class="prod-code">Mã: ${item.productSnapshot.productCode}</div>
               </div>
             </div>
           </td>
@@ -1519,6 +1553,7 @@ export class PdfService {
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <base href="https://ngocphieupc.shop/" />
   <title>HÓA ĐƠN BÁN HÀNG - ${invoice.invoiceCode}</title>
   <style>${this.getCommonCss()}</style>
 </head>
@@ -1555,13 +1590,14 @@ export class PdfService {
       <div class="table-container">
         <table class="doc-table">
           <colgroup>
+            <col style="width: 4%;" />
+            <col style="width: 38%;" />
+            <col style="width: 22%;" />
+            <col style="width: 14%;" />
             <col style="width: 5%;" />
-            <col style="width: 30%;" />
-            <col style="width: 25%;" />
-            <col style="width: 13%;" />
-            <col style="width: 7%;" />
-            <col style="width: 20%;" />
+            <col style="width: 17%;" />
           </colgroup>
+
           <thead>
             <tr>
               <th class="col-stt">STT</th>
@@ -1588,8 +1624,9 @@ export class PdfService {
             THANH TOÁN NHANH (VIETQR)
           </div>
           <div class="qr-wrap">
-            ${payment.qrUrl ? `<div class="qr-img-box"><img src="${payment.qrUrl}" alt="VietQR" class="qr-img" /></div>` : ''}
+            ${resolvedQrUrl ? `<div class="qr-img-box"><img src="${resolvedQrUrl}" alt="VietQR" class="qr-img" onerror="this.parentElement.style.display='none';" /></div>` : ''}
             <div class="qr-info">
+
               <div><span class="qr-info-label">Ngân hàng:</span> <span class="qr-info-val">${payment.bankName}</span></div>
               <div><span class="qr-info-label">Chủ TK:</span> <span class="qr-info-val">${payment.accountName}</span></div>
               <div><span class="qr-info-label">Số TK:</span> <span class="qr-acc-no">${payment.accountNo}</span></div>

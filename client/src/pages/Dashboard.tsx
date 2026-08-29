@@ -1,15 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { DashboardStats, InventoryItem } from '@/types';
-import { ProductCategory, ProductCondition } from '@/types';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import {
   Package, Warehouse, Laptop, Cpu, MemoryStick, HardDrive,
   Gamepad2, CircuitBoard, Plug, Box, Monitor, TrendingUp,
   ShoppingCart, Plus, DollarSign, Wallet, ArrowUpRight,
-  Users, Truck,
+  Users, Truck, Calendar, Clock, Filter, BarChart3,
 } from 'lucide-react';
 
 const categoryConfig: { key: string; label: string; icon: any; gradient: string }[] = [
@@ -24,6 +23,17 @@ const categoryConfig: { key: string; label: string; icon: any; gradient: string 
   { key: 'Laptop', label: 'Laptop', icon: Laptop, gradient: 'from-violet-500 to-purple-400' },
 ];
 
+type DatePreset = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM';
+
+const PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'ALL', label: 'Tất cả thời gian' },
+  { key: 'TODAY', label: 'Hôm nay' },
+  { key: 'YESTERDAY', label: 'Hôm qua' },
+  { key: 'THIS_MONTH', label: 'Tháng này' },
+  { key: 'LAST_MONTH', label: 'Tháng trước' },
+  { key: 'CUSTOM', label: 'Tùy chọn...' },
+];
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { hasPermission } = useAuthStore();
@@ -31,14 +41,47 @@ export function Dashboard() {
   const [recentInventory, setRecentInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchData();
+  // Date Filter State for Profit & Revenue
+  const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  const getPresetDateRange = useCallback((preset: DatePreset, customStart?: string, customEnd?: string) => {
+    const now = new Date();
+    let start: Date | null = null;
+    let end: Date | null = null;
+
+    if (preset === 'TODAY') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (preset === 'YESTERDAY') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      start = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate(), 0, 0, 0, 0);
+      end = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate(), 23, 59, 59, 999);
+    } else if (preset === 'THIS_MONTH') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (preset === 'LAST_MONTH') {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    } else if (preset === 'CUSTOM') {
+      if (customStart) start = new Date(`${customStart}T00:00:00.000`);
+      if (customEnd) end = new Date(`${customEnd}T23:59:59.999`);
+    }
+
+    return {
+      startDate: start ? start.toISOString() : undefined,
+      endDate: end ? end.toISOString() : undefined,
+    };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
+      const { startDate, endDate } = getPresetDateRange(datePreset, customStartDate, customEndDate);
       const [statsRes, recentRes] = await Promise.all([
-        api.get('/dashboard/stats'),
+        api.get('/dashboard/stats', { params: { startDate, endDate } }),
         api.get('/inventory?limit=8&inStockOnly=true'),
       ]);
       setStats(statsRes.data.data);
@@ -48,6 +91,33 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
+  }, [datePreset, customStartDate, customEndDate, getPresetDateRange]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getPeriodLabel = () => {
+    const now = new Date();
+    if (datePreset === 'ALL') return 'Toàn thời gian';
+    if (datePreset === 'TODAY') return `Hôm nay (${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()})`;
+    if (datePreset === 'YESTERDAY') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      return `Hôm qua (${yest.getDate()}/${yest.getMonth() + 1}/${yest.getFullYear()})`;
+    }
+    if (datePreset === 'THIS_MONTH') return `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`;
+    if (datePreset === 'LAST_MONTH') {
+      const lastMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+      const lastYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      return `Tháng ${lastMonth}/${lastYear}`;
+    }
+    if (datePreset === 'CUSTOM') {
+      return customStartDate || customEndDate
+        ? `${customStartDate || '...'} đến ${customEndDate || '...'}`
+        : 'Tùy chọn';
+    }
+    return '';
   };
 
   return (
@@ -57,7 +127,7 @@ export function Dashboard() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Dashboard Quản Lý Cửa Hàng</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
-            Tổng quan danh mục sản phẩm, kho linh kiện & hệ thống kho chung
+            Tổng quan danh mục sản phẩm, kho linh kiện & lợi nhuận kinh doanh
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
@@ -83,18 +153,79 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* Date Filter Toolbar for Revenue & Profit */}
+      <div className="p-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] space-y-3 shadow-sm">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-emerald-500" />
+            <h2 className="text-sm font-bold text-[rgb(var(--foreground))]">Xem Lợi Nhuận & Doanh Thu Theo Thời Gian</h2>
+          </div>
+          <span className="text-xs text-blue-500 font-bold px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20">
+            Kỳ báo cáo: {getPeriodLabel()}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setDatePreset(p.key)}
+              className={cn(
+                'px-3 py-1.5 rounded-xl font-semibold transition-all',
+                datePreset === p.key
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20'
+                  : 'bg-[rgb(var(--muted))] border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {datePreset === 'CUSTOM' && (
+          <div className="flex items-center gap-3 pt-2 border-t border-[rgb(var(--border))] flex-wrap text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-[rgb(var(--muted-foreground))] font-medium">Từ ngày:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-1.5 rounded-xl bg-[rgb(var(--muted))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[rgb(var(--muted-foreground))] font-medium">Đến ngày:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-1.5 rounded-xl bg-[rgb(var(--muted))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Financial Profit Stats (Revenue - Cost = Profit) */}
       {(hasPermission('dashboard.revenue') || hasPermission('dashboard.inventory_value') || hasPermission('dashboard.profit')) && (
         <div>
-          <h2 className="text-xs font-bold text-[rgb(var(--muted-foreground))] uppercase tracking-wider mb-3">
-            Thống kê tài chính & giá vốn kho
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-bold text-[rgb(var(--muted-foreground))] uppercase tracking-wider">
+              Thống kê tài chính ({getPeriodLabel()})
+            </h2>
+            {stats?.profitMargin !== undefined && stats.profitMargin > 0 && (
+              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-lg">
+                Tỷ suất lợi nhuận: {stats.profitMargin}%
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {hasPermission('dashboard.revenue') && (
               <FinancialStatCard
                 label="Tổng doanh thu bán ra"
                 value={formatCurrency(stats?.totalRevenue || 0)}
-                subtitle="Doanh thu từ các hóa đơn đã chốt"
+                subtitle={`Doanh thu từ ${stats?.totalFinalizedInvoices || 0} HĐ chốt (${getPeriodLabel()})`}
                 icon={DollarSign}
                 gradient="from-blue-500 to-cyan-500"
                 loading={loading}
@@ -104,7 +235,7 @@ export function Dashboard() {
               <FinancialStatCard
                 label="Tổng giá vốn kho (Còn Tồn)"
                 value={formatCurrency(stats?.totalStockValuation || 0)}
-                subtitle="Tổng tiền nhập hàng cho tất cả linh kiện còn tồn"
+                subtitle="Tổng tiền nhập cho linh kiện đang tồn"
                 icon={Wallet}
                 gradient="from-amber-500 to-orange-500"
                 loading={loading}
@@ -114,7 +245,8 @@ export function Dashboard() {
               <FinancialStatCard
                 label="Tiền lời (Lợi nhuận gộp)"
                 value={formatCurrency(stats?.totalProfit || 0)}
-                subtitle="Doanh thu bán ra - Giá vốn xuất bán"
+                subtitle={`Lợi nhuận thực tế (${getPeriodLabel()})`}
+                badge={stats?.profitMargin !== undefined ? `Margin: ${stats.profitMargin}%` : undefined}
                 icon={ArrowUpRight}
                 gradient="from-emerald-500 to-teal-500"
                 highlight
@@ -124,6 +256,7 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
 
       {/* Debt & Store Management Stats */}
       <div>
@@ -170,31 +303,47 @@ export function Dashboard() {
 
       {/* Category Stats */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">Danh mục mã sản phẩm master</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Danh mục tồn kho sản phẩm</h2>
+            <p className="text-xs text-[rgb(var(--muted-foreground))]">Số lượng sản phẩm còn tồn kho theo từng danh mục</p>
+          </div>
+          <button
+            onClick={() => navigate('/inventory')}
+            className="text-sm text-blue-500 hover:text-blue-400 transition-smooth font-medium"
+          >
+            Xem toàn bộ kho tồn →
+          </button>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {categoryConfig.map((cat, i) => (
-            <button
-              key={cat.key}
-              onClick={() => navigate(`/products?category=${cat.key}`)}
-              className={cn(
-                'flex items-center gap-3 p-4 rounded-2xl border transition-smooth',
-                'bg-[rgb(var(--card))] border-[rgb(var(--border))]',
-                'hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/5',
-                'animate-fade-in'
-              )}
-              style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}
-            >
-              <div className={cn('w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center', cat.gradient)}>
-                <cat.icon className="w-5 h-5 text-white" />
-              </div>
-              <div className="text-left">
-                <p className="text-xs text-[rgb(var(--muted-foreground))]">{cat.label}</p>
-                <p className="text-lg font-bold">
-                  {loading ? '—' : stats?.byCategory?.[cat.key] || 0}
-                </p>
-              </div>
-            </button>
-          ))}
+          {categoryConfig.map((cat, i) => {
+            const inStockQty = stats?.byCategory?.[cat.key] || 0;
+
+            return (
+              <button
+                key={cat.key}
+                onClick={() => navigate(`/inventory?category=${encodeURIComponent(cat.key)}`)}
+                className={cn(
+                  'flex items-center gap-3 p-4 rounded-2xl border transition-all duration-200 cursor-pointer',
+                  'bg-[rgb(var(--card))] border-[rgb(var(--border))]',
+                  'hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02]',
+                  'animate-fade-in text-left'
+                )}
+                title={`Bấm để xem tồn kho lọc theo danh mục ${cat.label} (Còn tồn: ${inStockQty})`}
+                style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}
+              >
+                <div className={cn('w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0 shadow-md', cat.gradient)}>
+                  <cat.icon className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left min-w-0">
+                  <p className="text-xs text-[rgb(var(--muted-foreground))] truncate">{cat.label}</p>
+                  <p className="text-lg font-bold text-[rgb(var(--foreground))]">
+                    {loading ? '—' : inStockQty}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -293,9 +442,9 @@ export function Dashboard() {
 }
 
 function FinancialStatCard({
-  label, value, subtitle, icon: Icon, gradient, highlight = false, loading,
+  label, value, subtitle, badge, icon: Icon, gradient, highlight = false, loading,
 }: {
-  label: string; value: string; subtitle: string; icon: any; gradient: string; highlight?: boolean; loading: boolean;
+  label: string; value: string; subtitle: string; badge?: string; icon: any; gradient: string; highlight?: boolean; loading: boolean;
 }) {
   return (
     <div className={cn(
@@ -305,7 +454,14 @@ function FinancialStatCard({
     )}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-[rgb(var(--muted-foreground))] font-medium">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-[rgb(var(--muted-foreground))] font-medium">{label}</p>
+            {badge && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                {badge}
+              </span>
+            )}
+          </div>
           {loading ? (
             <div className="skeleton w-28 h-8 mt-1" />
           ) : (
@@ -313,13 +469,14 @@ function FinancialStatCard({
           )}
           <p className="text-[10px] text-[rgb(var(--muted-foreground))] mt-1">{subtitle}</p>
         </div>
-        <div className={cn('w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center', gradient)}>
+        <div className={cn('w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0', gradient)}>
           <Icon className="w-5 h-5 text-white" />
         </div>
       </div>
     </div>
   );
 }
+
 
 function StatCard({
   label, value, icon: Icon, gradient, loading,
