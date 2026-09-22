@@ -40,7 +40,7 @@ interface PurchaseItemRowProps {
   globalSerialSet?: Map<string, number>; // Maps each trimmed serial to occurrence count in whole form
   onSelectRow: (selected: boolean) => void;
   onChangeField: (field: string, value: any) => void;
-  onSelectProduct: (productId: string) => void;
+  onSelectProduct: (productId: string, product?: any) => void;
   onRemove: () => void;
   onOpenProductModal: () => void;
   onEnterPressAtEnd: () => void;
@@ -193,7 +193,7 @@ export function PurchaseItemRow({
                 required
                 products={products}
                 value={item.productId}
-                onChange={(pId) => onSelectProduct(pId)}
+                onChange={(pId, prod) => onSelectProduct(pId, prod)}
                 onAddNew={onOpenProductModal}
                 placeholder="-- Chọn linh kiện / sản phẩm --"
                 onSelectAndFocusNext={() => {
@@ -399,7 +399,7 @@ export function PurchaseItemRow({
             required
             products={products}
             value={item.productId}
-            onChange={(pId) => onSelectProduct(pId)}
+            onChange={(pId, prod) => onSelectProduct(pId, prod)}
             onAddNew={onOpenProductModal}
             placeholder="-- Chọn linh kiện / sản phẩm --"
           />

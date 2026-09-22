@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, FileSpreadsheet, CheckCircle2, AlertCircle, Plus, ArrowRight } from 'lucide-react';
 import { ProductCondition } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, removeVietnameseTones } from '@/lib/utils';
 import type { PurchaseItemData } from './PurchaseItemRow';
 
 interface PurchaseExcelPasteModalProps {
@@ -48,11 +48,28 @@ export function PurchaseExcelPasteModal({
       const warrantyMonths = Number(warrantyStr) || 12;
 
       // Find matching product in catalog
-      const term = codeOrName.toLowerCase();
+      const term = codeOrName.toLowerCase().trim();
+      const normTerm = removeVietnameseTones(term);
       const matched = products.find((p) => {
         const pCode = (p.productCode || '').toLowerCase();
         const pName = (p.name || '').toLowerCase();
-        return pCode === term || pName === term || pCode.includes(term) || pName.includes(term);
+        const normName = removeVietnameseTones(pName);
+        const pModel = (p.modelName || p.model || '').toLowerCase();
+        const normModel = removeVietnameseTones(pModel);
+        const pBarcode = (p.barcode || '').toLowerCase();
+
+        return (
+          pCode === term ||
+          pName === term ||
+          normName === normTerm ||
+          pModel === term ||
+          normModel === normTerm ||
+          pBarcode === term ||
+          pCode.includes(term) ||
+          pName.includes(term) ||
+          normName.includes(normTerm) ||
+          (pModel && (pModel.includes(term) || normModel.includes(normTerm)))
+        );
       });
 
       return {

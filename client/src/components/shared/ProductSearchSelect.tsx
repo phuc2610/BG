@@ -1,15 +1,17 @@
-import { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Check, X, Plus, Package } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Search, ChevronDown, Check, X, Plus, Package, Loader2 } from 'lucide-react';
+import { cn, removeVietnameseTones } from '@/lib/utils';
+import api from '@/lib/api';
 
 interface ProductSearchSelectProps {
   products: any[];
   value: string;
-  onChange: (productId: string) => void;
+  onChange: (productId: string, product?: any) => void;
   placeholder?: string;
   onAddNew?: () => void;
   required?: boolean;
   onSelectAndFocusNext?: () => void;
+  onProductsFound?: (products: any[]) => void;
 }
 
 export function ProductSearchSelect({
@@ -20,10 +22,14 @@ export function ProductSearchSelect({
   onAddNew,
   required = false,
   onSelectAndFocusNext,
+  onProductsFound,
 }: ProductSearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [remoteProducts, setRemoteProducts] = useState<any[]>([]);
+  const [isSearchingServer, setIsSearchingServer] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -34,24 +40,89 @@ export function ProductSearchSelect({
       ? p._id
       : p?._id?.toString() || p?.id || String(p?._id || '');
 
-  // Currently selected product
-  const selectedProduct = products.find((p) => getPid(p) === value);
+  // Merge products from props and remote search results
+  const allProducts = useMemo(() => {
+    if (remoteProducts.length === 0) return products;
+    const map = new Map<string, any>();
+    products.forEach((p) => map.set(getPid(p), p));
+    remoteProducts.forEach((p) => {
+      const id = getPid(p);
+      if (!map.has(id)) {
+        map.set(id, p);
+      }
+    });
+    return Array.from(map.values());
+  }, [products, remoteProducts]);
 
-  // Filter products by search term (code, name, brand, category)
-  const filteredProducts = products.filter((p) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase().trim();
-    const code = (p.productCode || '').toLowerCase();
-    const name = (p.name || '').toLowerCase();
-    const brand = (typeof p.brand === 'object' ? p.brand?.name : p.brand || '').toLowerCase();
-    const category = (p.category || '').toLowerCase();
-    return (
-      code.includes(term) ||
-      name.includes(term) ||
-      brand.includes(term) ||
-      category.includes(term)
-    );
-  });
+  // Currently selected product
+  const selectedProduct = allProducts.find((p) => getPid(p) === value);
+
+  // Filter products locally by search term (code, name, brand, category, model, barcode)
+  // Accent-insensitive and multi-token matching
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return allProducts;
+
+    const rawTerm = searchTerm.toLowerCase().trim();
+    const normTerm = removeVietnameseTones(rawTerm);
+    const searchTokens = normTerm.split(/\s+/).filter(Boolean);
+
+    return allProducts.filter((p) => {
+      const code = (p.productCode || '').toLowerCase();
+      const name = (p.name || '').toLowerCase();
+      const normName = removeVietnameseTones(name);
+      const brand = (typeof p.brand === 'object' ? p.brand?.name : p.brand || '').toLowerCase();
+      const normBrand = removeVietnameseTones(brand);
+      const category = (p.category || '').toLowerCase();
+      const normCat = removeVietnameseTones(category);
+      const model = (p.modelName || p.model || '').toLowerCase();
+      const normModel = removeVietnameseTones(model);
+      const barcode = (p.barcode || '').toLowerCase();
+
+      // Combined searchable text (both original lowercase and diacritic-free lowercase)
+      const fullText = `${code} ${normName} ${name} ${normBrand} ${brand} ${normCat} ${category} ${normModel} ${model} ${barcode}`;
+
+      // All search tokens must match somewhere in the attributes
+      return searchTokens.every((token) => fullText.includes(token));
+    });
+  }, [allProducts, searchTerm]);
+
+  // Remote server search fallback with 250ms debounce
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (!trimmed || trimmed.length < 2) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingServer(true);
+        const res = await api.get('/products', {
+          params: {
+            search: trimmed,
+            limit: 50,
+          },
+        });
+        if (res.data?.success && Array.isArray(res.data?.data)) {
+          const found = res.data.data;
+          if (found.length > 0) {
+            setRemoteProducts((prev) => {
+              const map = new Map<string, any>();
+              prev.forEach((p) => map.set(getPid(p), p));
+              found.forEach((p: any) => map.set(getPid(p), p));
+              return Array.from(map.values());
+            });
+            if (onProductsFound) {
+              onProductsFound(found);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi tìm kiếm sản phẩm trên máy chủ:', err);
+      } finally {
+        setIsSearchingServer(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, onProductsFound]);
 
   // Reset activeIndex when filter changes
   useEffect(() => {
@@ -76,8 +147,9 @@ export function ProductSearchSelect({
     }
   }, [isOpen]);
 
-  const handleSelect = (pId: string) => {
-    onChange(pId);
+  const handleSelect = (product: any) => {
+    const pId = getPid(product);
+    onChange(pId, product);
     setIsOpen(false);
     setSearchTerm('');
     if (onSelectAndFocusNext) {
@@ -87,7 +159,7 @@ export function ProductSearchSelect({
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange('');
+    onChange('', null);
     setSearchTerm('');
   };
 
@@ -112,7 +184,7 @@ export function ProductSearchSelect({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (filteredProducts.length > 0 && activeIndex >= 0 && activeIndex < filteredProducts.length) {
-        handleSelect(getPid(filteredProducts[activeIndex]));
+        handleSelect(filteredProducts[activeIndex]);
       }
     }
   };
@@ -141,6 +213,11 @@ export function ProductSearchSelect({
             <span className="font-semibold text-[rgb(var(--foreground))] truncate">
               {selectedProduct.name}
             </span>
+            {(selectedProduct.modelName || selectedProduct.model) && (
+              <span className="text-[11px] text-indigo-400 shrink-0 font-medium font-mono hidden sm:inline">
+                [{selectedProduct.modelName || selectedProduct.model}]
+              </span>
+            )}
             {selectedProduct.brand && (
               <span className="text-[11px] text-[rgb(var(--muted-foreground))] shrink-0 font-medium">
                 ({typeof selectedProduct.brand === 'object' ? selectedProduct.brand?.name : selectedProduct.brand})
@@ -183,17 +260,21 @@ export function ProductSearchSelect({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-full min-w-[340px] sm:min-w-[420px] max-w-[90vw] z-50 bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+        <div className="absolute left-0 top-full mt-1.5 w-full max-w-[90vw] min-w-[min(340px,90vw)] sm:min-w-[440px] z-50 bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
           {/* Search Header */}
           <div className="p-2 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/30] flex items-center gap-2">
-            <Search className="w-4 h-4 text-indigo-500 shrink-0 ml-2" />
+            {isSearchingServer ? (
+              <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0 ml-2" />
+            ) : (
+              <Search className="w-4 h-4 text-indigo-500 shrink-0 ml-2" />
+            )}
             <input
               ref={inputRef}
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Tìm theo mã, tên, hãng, danh mục..."
+              placeholder="Tìm theo mã, tên, model, hãng, danh mục..."
               className="w-full bg-transparent border-none text-xs text-[rgb(var(--foreground))] focus:outline-none placeholder:text-[rgb(var(--muted-foreground))]"
             />
             {searchTerm && (
@@ -208,25 +289,36 @@ export function ProductSearchSelect({
           </div>
 
           {/* Options List */}
-          <div className="max-h-60 overflow-y-auto p-1 divide-y divide-[rgb(var(--border))/40]">
+          <div className="max-h-64 overflow-y-auto p-1 divide-y divide-[rgb(var(--border))/40]">
             {filteredProducts.length === 0 ? (
               <div className="py-6 px-4 text-center space-y-2">
-                <Package className="w-8 h-8 mx-auto text-[rgb(var(--muted-foreground))] opacity-30" />
-                <p className="text-xs text-[rgb(var(--muted-foreground))]">
-                  Không tìm thấy sản phẩm nào khớp từ khóa "{searchTerm}"
-                </p>
-                {onAddNew && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      onAddNew();
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-500 text-xs font-bold hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Tạo Mã Sản Phẩm Mới Ngay</span>
-                  </button>
+                {isSearchingServer ? (
+                  <div className="space-y-2">
+                    <Loader2 className="w-6 h-6 mx-auto text-indigo-500 animate-spin" />
+                    <p className="text-xs text-[rgb(var(--muted-foreground))]">
+                      Đang tìm kiếm trên máy chủ cho "{searchTerm}"...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <Package className="w-8 h-8 mx-auto text-[rgb(var(--muted-foreground))] opacity-30" />
+                    <p className="text-xs text-[rgb(var(--muted-foreground))]">
+                      Không tìm thấy sản phẩm nào khớp từ khóa "{searchTerm}"
+                    </p>
+                    {onAddNew && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOpen(false);
+                          onAddNew();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-500 text-xs font-bold hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Tạo Mã Sản Phẩm Mới Ngay</span>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             ) : (
@@ -235,10 +327,12 @@ export function ProductSearchSelect({
                 const isSelected = pid === value;
                 const isActive = idx === activeIndex;
                 const brandStr = typeof p.brand === 'object' ? p.brand?.name : p.brand;
+                const modelStr = p.modelName || p.model;
+
                 return (
                   <div
                     key={pid}
-                    onClick={() => handleSelect(pid)}
+                    onClick={() => handleSelect(p)}
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={cn(
                       'px-3 py-2.5 rounded-xl text-xs cursor-pointer flex items-center justify-between gap-3 transition-colors',
@@ -255,8 +349,13 @@ export function ProductSearchSelect({
                       </span>
                       <div className="truncate">
                         <div className="font-semibold truncate">{p.name}</div>
-                        <div className="text-[10px] text-[rgb(var(--muted-foreground))] flex items-center gap-2 font-normal mt-0.5">
+                        <div className="text-[10px] text-[rgb(var(--muted-foreground))] flex items-center gap-2 font-normal mt-0.5 flex-wrap">
                           {p.category && <span>Danh mục: {p.category}</span>}
+                          {modelStr && (
+                            <span className="text-indigo-400 font-mono font-semibold">
+                              • Model: {modelStr}
+                            </span>
+                          )}
                           {brandStr && <span>• Hãng: {brandStr}</span>}
                         </div>
                       </div>

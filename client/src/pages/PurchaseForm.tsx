@@ -136,16 +136,23 @@ export function PurchaseForm() {
       });
       if (res.data.success && res.data.data) {
         const d = res.data.data;
-        setNewProdData((prev) => ({
-          ...prev,
-          brand: d.brand || prev.brand,
-          model: d.model || prev.model,
-          description: d.description || prev.description,
-          specs: {
-            ...prev.specs,
-            ...(d.specs || {}),
-          },
-        }));
+        setNewProdData((prev) => {
+          const cleanedSpecs = { ...prev.specs } as any;
+          if (d.specs && typeof d.specs === 'object') {
+            Object.entries(d.specs).forEach(([k, v]) => {
+              if (v !== null && v !== undefined && String(v).trim()) {
+                cleanedSpecs[k] = String(v).trim();
+              }
+            });
+          }
+          return {
+            ...prev,
+            brand: d.brand || prev.brand,
+            model: d.model || prev.model,
+            description: d.description || prev.description,
+            specs: cleanedSpecs,
+          };
+        });
         setShowAllSpecs(true);
         toast.success('✨ Google Gemini đã tự động điền Thông số & Hãng!');
       }
@@ -161,8 +168,8 @@ export function PurchaseForm() {
       try {
         setLoading(true);
         const [supRes, prodRes] = await Promise.all([
-          api.get('/suppliers', { params: { limit: 100 } }),
-          api.get('/products', { params: { limit: 200 } }),
+          api.get('/suppliers', { params: { limit: 500 } }),
+          api.get('/products', { params: { limit: 2000 } }),
         ]);
 
         if (supRes.data.success) {
@@ -309,7 +316,26 @@ export function PurchaseForm() {
 
     try {
       setCreatingProduct(true);
-      const res = await api.post('/products', newProdData);
+      const cleanedSpecs: Record<string, string> = {};
+      if (newProdData.specs && typeof newProdData.specs === 'object') {
+        Object.entries(newProdData.specs).forEach(([k, v]) => {
+          if (v !== null && v !== undefined && String(v).trim()) {
+            cleanedSpecs[k] = String(v).trim();
+          }
+        });
+      }
+
+      const payload = {
+        name: newProdData.name.trim(),
+        category: newProdData.category,
+        brand: newProdData.brand.trim(),
+        model: newProdData.model.trim(),
+        description: newProdData.description ? newProdData.description.trim() : undefined,
+        imageUrl: newProdData.imageUrl ? newProdData.imageUrl.trim() : undefined,
+        specs: cleanedSpecs,
+      };
+
+      const res = await api.post('/products', payload);
       if (res.data.success) {
         const createdProd = res.data.data;
         toast.success(`Đã tạo mã sản phẩm mới: [${createdProd.productCode}] ${createdProd.name}`);
@@ -354,8 +380,11 @@ export function PurchaseForm() {
       ? p._id
       : p?._id?.toString() || p?.id || String(p?._id || '');
 
-  const handleProductSelect = (index: number, pId: string) => {
-    const prod = products.find((p) => getPid(p) === pId);
+  const handleProductSelect = (index: number, pId: string, selectedProd?: any) => {
+    const prod = selectedProd || products.find((p) => getPid(p) === pId);
+    if (selectedProd && !products.some((p) => getPid(p) === pId)) {
+      setProducts((prev) => [selectedProd, ...prev]);
+    }
     const updated = [...items];
     if (prod) {
       updated[index] = {
@@ -723,7 +752,7 @@ export function PurchaseForm() {
             <h1 className="text-2xl font-bold tracking-tight text-[rgb(var(--foreground))]">
               {id ? 'Chỉnh Sửa Phiếu Nhập Hàng' : 'Tạo Phiếu Nhập Hàng Mới'}
             </h1>
-            <p className="text-sm text-[rgb(var(--muted-foreground))] mt-0.5">
+            <p className="hidden sm:block text-sm text-[rgb(var(--muted-foreground))] mt-0.5">
               Nhập linh kiện vật lý theo Serial Number từ Nhà cung cấp
             </p>
           </div>
@@ -1080,7 +1109,7 @@ export function PurchaseForm() {
                   globalSerialSet={globalSerialMap}
                   onSelectRow={(selected) => handleSelectRow(originalIndex, selected)}
                   onChangeField={(field, val) => handleItemChange(originalIndex, field, val)}
-                  onSelectProduct={(pId) => handleProductSelect(originalIndex, pId)}
+                  onSelectProduct={(pId, prod) => handleProductSelect(originalIndex, pId, prod)}
                   onRemove={() => removeItemRow(originalIndex)}
                   onOpenProductModal={() => {
                     setTargetItemIndex(originalIndex);
@@ -1418,7 +1447,7 @@ export function PurchaseForm() {
               </button>
             </div>
 
-            <form onSubmit={handleQuickAddProduct} className="p-6 space-y-4 overflow-y-auto flex-1">
+            <form onSubmit={handleQuickAddProduct} noValidate className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-[rgb(var(--foreground))]">
@@ -1440,6 +1469,7 @@ export function PurchaseForm() {
                 </div>
                 <input
                   type="text"
+                  name="productName"
                   required
                   placeholder="VD: RAM Corsair Vengeance LPX 16GB DDR4 3200MHz..."
                   value={newProdData.name}
@@ -1454,6 +1484,7 @@ export function PurchaseForm() {
                     Danh Mục Linh Kiện *
                   </label>
                   <select
+                    name="productCategory"
                     value={newProdData.category}
                     onChange={(e) => setNewProdData({ ...newProdData, category: e.target.value as any })}
                     className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))] focus:outline-none focus:border-indigo-500 font-medium"
@@ -1480,6 +1511,7 @@ export function PurchaseForm() {
                   </label>
                   <input
                     type="text"
+                    name="productBrand"
                     required
                     placeholder="VD: Intel, ASUS, Corsair..."
                     value={newProdData.brand}
@@ -1494,6 +1526,7 @@ export function PurchaseForm() {
                   </label>
                   <input
                     type="text"
+                    name="productModel"
                     required
                     placeholder="VD: CMK16GX4M1E3200C16..."
                     value={newProdData.model}

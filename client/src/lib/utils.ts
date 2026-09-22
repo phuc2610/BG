@@ -9,6 +9,18 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
 }
 
+/** Formats a number with thousand-separator dots for editable inputs (no currency symbol). */
+export function formatNumberInput(value: number): string {
+  if (!value && value !== 0) return '';
+  return new Intl.NumberFormat('vi-VN').format(value);
+}
+
+/** Strips thousand-separator characters back to a plain number for editable inputs. */
+export function parseNumberInput(value: string): number {
+  const digitsOnly = value.replace(/[^\d]/g, '');
+  return digitsOnly ? parseInt(digitsOnly, 10) : 0;
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
@@ -172,4 +184,16 @@ export function calculateWarrantyRemaining(
     isExpired: diffDays <= 0,
     formattedEndDate: formatDate(endDate),
   };
+}
+
+/**
+ * Removes Vietnamese accents/diacritics from a string for fuzzy, accent-insensitive search.
+ */
+export function removeVietnameseTones(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
 }
