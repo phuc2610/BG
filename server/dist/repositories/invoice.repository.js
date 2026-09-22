@@ -79,10 +79,18 @@ class InvoiceRepository extends base_repository_1.BaseRepository {
         let totalRevenue = 0;
         let totalPaid = 0;
         let totalReceivables = 0;
+        let totalProfit = 0;
         for (const inv of activeInvoices) {
             totalRevenue += inv.grandTotal || 0;
             totalPaid += inv.totalPaid || 0;
             totalReceivables += inv.remainingAmount || 0;
+            if (typeof inv.profit === 'number' && !isNaN(inv.profit)) {
+                totalProfit += inv.profit;
+            }
+            else {
+                const netGoods = (inv.grandTotal || 0) - (inv.vatAmount || 0) - (inv.shippingFee || 0);
+                totalProfit += netGoods - (inv.totalCost || 0);
+            }
         }
         const averageInvoiceValue = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
         return {
@@ -90,6 +98,7 @@ class InvoiceRepository extends base_repository_1.BaseRepository {
             totalPaid,
             totalReceivables,
             totalInvoices,
+            totalProfit,
             averageInvoiceValue,
         };
     }

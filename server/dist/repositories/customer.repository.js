@@ -64,7 +64,7 @@ class CustomerRepository extends base_repository_1.BaseRepository {
             totalRevenue += inv.grandTotal || 0;
             totalPaid += inv.totalPaid || 0;
             totalDebt += inv.remainingAmount || 0;
-            totalProfit += (inv.profit !== undefined ? inv.profit : ((inv.grandTotal || 0) - (inv.totalCost || 0)));
+            totalProfit += (inv.profit !== undefined ? inv.profit : ((inv.grandTotal || 0) - (inv.vatAmount || 0) - (inv.shippingFee || 0) - (inv.totalCost || 0)));
         }
         return {
             totalCustomers,

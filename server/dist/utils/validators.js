@@ -8,22 +8,24 @@ exports.createProductSchema = zod_1.z.object({
     category: zod_1.z.nativeEnum(types_1.ProductCategory, { errorMap: () => ({ message: 'Danh mục không hợp lệ' }) }),
     brand: zod_1.z.string().min(1, 'Thương hiệu là bắt buộc').max(100),
     model: zod_1.z.string().min(1, 'Model là bắt buộc').max(100),
-    description: zod_1.z.string().max(5000).optional(),
-    specs: zod_1.z.object({
-        cpu: zod_1.z.string().optional(),
-        mainboard: zod_1.z.string().optional(),
-        ram: zod_1.z.string().optional(),
-        ssd: zod_1.z.string().optional(),
-        hdd: zod_1.z.string().optional(),
-        vga: zod_1.z.string().optional(),
-        psu: zod_1.z.string().optional(),
-        case: zod_1.z.string().optional(),
-        cooler: zod_1.z.string().optional(),
-        windows: zod_1.z.string().optional(),
-        office: zod_1.z.string().optional(),
-        accessories: zod_1.z.string().optional(),
-        notes: zod_1.z.string().optional(),
-    }).optional(),
+    description: zod_1.z.string().max(5000).nullish().or(zod_1.z.literal('')),
+    imageUrl: zod_1.z.string().nullish().or(zod_1.z.literal('')),
+    imagePublicId: zod_1.z.string().nullish().or(zod_1.z.literal('')),
+    images: zod_1.z.array(zod_1.z.any()).optional(),
+    specs: zod_1.z
+        .record(zod_1.z.any())
+        .nullish()
+        .transform((val) => {
+        if (!val)
+            return {};
+        const cleaned = {};
+        for (const [k, v] of Object.entries(val)) {
+            if (v !== null && v !== undefined && String(v).trim()) {
+                cleaned[k] = String(v).trim();
+            }
+        }
+        return cleaned;
+    }),
 });
 exports.createInventoryLotSchema = zod_1.z.object({
     product: zod_1.z.string().min(1, 'Vui lòng chọn Mã sản phẩm master'),

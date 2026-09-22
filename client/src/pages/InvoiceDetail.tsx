@@ -140,10 +140,20 @@ export function InvoiceDetail() {
       setLoadingSerials(true);
       const res = await api.get(`/inventory-units/by-product/${productId}`);
       if (res.data.success) {
+        const selectedInOtherLines = new Set<string>();
+        invoice.items.forEach((it, idx) => {
+          if (idx !== itemIdx && it.selectedSerials) {
+            it.selectedSerials.forEach((s) => {
+              if (s) selectedInOtherLines.add(s);
+            });
+          }
+        });
+
         const units = res.data.data.filter(
           (u: InventoryUnitRecord) =>
-            u.status === 'AVAILABLE' ||
-            (u.status === 'RESERVED' && u.reservedByInvoiceId === invoice._id)
+            !selectedInOtherLines.has(u.serialNumber) &&
+            (u.status === 'AVAILABLE' ||
+            (u.status === 'RESERVED' && u.reservedByInvoiceId === invoice._id))
         );
         setAvailableSerials(units);
       }
@@ -445,7 +455,152 @@ export function InvoiceDetail() {
             </h3>
           </div>
 
-          <div className="rounded-xl border border-[rgb(var(--border))] overflow-hidden">
+          {/* Mobile Card List */}
+          <div className="md:hidden space-y-3">
+            {invoice.items.map((item, idx) => {
+              const selectedCount = (item.selectedSerials || []).length;
+              const itemSerials =
+                item.selectedSerials && item.selectedSerials.length > 0
+                  ? item.selectedSerials
+                  : item.serialNumber
+                  ? [item.serialNumber]
+                  : [];
+              const origins = itemOriginsMap[idx] || [];
+
+              return (
+                <div key={idx} className="rounded-xl border border-[rgb(var(--border))] p-3.5 text-xs">
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 rounded-lg bg-[rgb(var(--muted))] overflow-hidden flex-shrink-0">
+                      {item.productSnapshot.imageUrl ? (
+                        <img src={item.productSnapshot.imageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="w-4 h-4 opacity-30" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-semibold text-sm">{item.productSnapshot.name}</p>
+                        {item.itemStatus === 'RETURNED' && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">[ĐÃ TRẢ]</span>
+                        )}
+                        {item.itemStatus === 'EXCHANGED' && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">[ĐÃ ĐỔI]</span>
+                        )}
+                      </div>
+                      <p className="font-mono text-[11px] text-blue-500 mt-0.5">
+                        {item.productSnapshot.productCode}
+                        {item.serialNumber && <span className="text-[rgb(var(--muted-foreground))]"> • S/N: {item.serialNumber}</span>}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đơn Giá</p>
+                      <p className="font-medium">{formatCurrency(item.unitPrice)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">SL</p>
+                      <p className="font-bold">{item.quantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Thành Tiền</p>
+                      <p className="font-bold">{formatCurrency(item.total)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-[rgb(var(--border))]">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-teal-500/10 text-teal-600 border border-teal-500/20">
+                      {item.warranty}
+                    </span>
+                    {isDraft && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSerialModal(idx)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                          selectedCount > 0
+                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                            : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                        }`}
+                      >
+                        {selectedCount > 0 ? `✓ Serial (${selectedCount}/${item.quantity})` : `+ Chọn Serial`}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandSerialItem(idx)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all inline-flex items-center gap-1 ${
+                        expandedSerialItems[idx]
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold'
+                          : 'bg-[rgb(var(--muted))] text-[rgb(var(--foreground))] border border-[rgb(var(--border))]'
+                      }`}
+                    >
+                      <Truck className="w-3 h-3 text-emerald-400" />
+                      <span>Nguồn gốc nhập</span>
+                      {expandedSerialItems[idx] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                  </div>
+
+                  {item.itemStatus === 'EXCHANGED' && item.exchangedToItem && (
+                    <div className="mt-2 p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300">
+                      ↓ Đổi sang: <strong>{item.exchangedToItem.productName}</strong> • Giá: {formatCurrency(item.exchangedToItem.unitPrice)}
+                    </div>
+                  )}
+
+                  {expandedSerialItems[idx] && (
+                    <div className="mt-2.5 pt-2.5 border-t border-[rgb(var(--border))] space-y-2">
+                      {origins.length === 0 ? (
+                        <p className="text-[rgb(var(--muted-foreground))] italic text-center py-2">Đang tra cứu dữ liệu nguồn gốc nhập kho...</p>
+                      ) : (
+                        origins.map((orig: any, origIdx: number) => (
+                          <div key={origIdx} className="p-2.5 rounded-lg bg-[rgb(var(--muted))]/30 border border-[rgb(var(--border))] space-y-1">
+                            <div className="flex items-center justify-between gap-2">
+                              {orig.purchaseCode && orig.purchaseCode !== 'PNK (Chưa gán)' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/purchases?search=${encodeURIComponent(orig.purchaseCode || '')}`)}
+                                  className="font-mono font-bold text-[11px] text-blue-400 inline-flex items-center gap-1"
+                                >
+                                  <Truck className="w-3 h-3" /> {orig.purchaseCode}
+                                </button>
+                              ) : (
+                                <span className="text-[rgb(var(--muted-foreground))] italic text-[11px]">—</span>
+                              )}
+                              <span className="font-mono font-bold text-emerald-400 text-[11px]">{orig.serialNumber || '— (Không S/N)'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-[rgb(var(--muted-foreground))]">
+                              <span>{orig.supplierName || 'NCC N/A'}</span>
+                              <span>{formatDate(orig.purchaseDate)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span>Giá nhập: <strong>{formatCurrency(orig.purchasePrice || 0)}</strong></span>
+                              {orig.remainingWarrantyDays !== undefined && (
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-semibold ${
+                                    orig.remainingWarrantyDays <= 0
+                                      ? 'bg-red-500/10 text-red-500'
+                                      : orig.remainingWarrantyDays <= 30
+                                      ? 'bg-amber-500/10 text-amber-500'
+                                      : 'bg-emerald-500/10 text-emerald-500'
+                                  }`}
+                                >
+                                  {orig.remainingWarrantyDays <= 0 ? 'Hết BH' : `Còn ${orig.remainingWarrantyDays}d`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block rounded-xl border border-[rgb(var(--border))] overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[10px] font-semibold text-[rgb(var(--muted-foreground))] uppercase">
                 <tr>
@@ -724,6 +879,18 @@ export function InvoiceDetail() {
               <div className="flex justify-between text-red-500">
                 <span>Chiết khấu:</span>
                 <span>-{formatCurrency(invoice.discount)}</span>
+              </div>
+            )}
+            {invoice.shippingFee > 0 && (
+              <div className="flex justify-between text-[rgb(var(--muted-foreground))]">
+                <span>Phí vận chuyển:</span>
+                <span className="font-semibold text-[rgb(var(--foreground))]">+{formatCurrency(invoice.shippingFee)}</span>
+              </div>
+            )}
+            {invoice.vatEnabled && (invoice.vatAmount || 0) > 0 && (
+              <div className="flex justify-between text-[rgb(var(--muted-foreground))]">
+                <span>VAT ({invoice.vatPercent}%):</span>
+                <span className="font-semibold text-[rgb(var(--foreground))]">+{formatCurrency(invoice.vatAmount)}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-bold pt-2 border-t border-[rgb(var(--border))]">
@@ -1145,12 +1312,12 @@ function RecordPaymentModal({
     <>
       <div className="overlay" onClick={onClose} />
       <div className={cn(
-        'fixed inset-x-4 top-[15%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[500px]',
-        'rounded-2xl border shadow-2xl z-50 overflow-hidden flex flex-col',
+        'fixed inset-x-4 top-[10%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[500px]',
+        'max-h-[80vh] rounded-2xl border shadow-2xl z-50 overflow-hidden flex flex-col',
         'bg-[rgb(var(--card))] border-[rgb(var(--border))]',
         'animate-scale-in'
       )}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--border))]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--border))] flex-shrink-0">
           <div className="flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-emerald-500" />
             <h2 className="text-base font-bold">Ghi Nhận Thanh Toán Hóa Đơn</h2>
@@ -1160,7 +1327,8 @@ function RecordPaymentModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden min-h-0 flex-1">
+        <div className="p-6 space-y-4 overflow-y-auto">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 flex justify-between">
             <span>Số tiền còn nợ:</span>
             <strong className="text-sm font-extrabold">{formatCurrency(invoice.remainingAmount)}</strong>
@@ -1236,7 +1404,8 @@ function RecordPaymentModal({
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[rgb(var(--border))]">
+        </div>
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgb(var(--border))] flex-shrink-0">
             <button
               type="button"
               onClick={onClose}

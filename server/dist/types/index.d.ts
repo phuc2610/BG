@@ -528,6 +528,7 @@ export interface PaginationQuery {
 export interface ProductFilterQuery extends PaginationQuery {
     category?: ProductCategory;
     brand?: string;
+    noImage?: boolean;
 }
 export interface InventoryFilterQuery extends PaginationQuery {
     category?: ProductCategory;
@@ -602,6 +603,7 @@ export interface InvoiceStats {
     totalPaid: number;
     totalReceivables: number;
     totalInvoices: number;
+    totalProfit: number;
     averageInvoiceValue: number;
 }
 export interface CustomerStats {

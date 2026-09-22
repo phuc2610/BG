@@ -49,13 +49,6 @@ export declare class InvoiceService {
      * Handles items with Serial Numbers, items without Serial Numbers (bulk/accessories),
      * and queries matched Purchase Receipts / Inventory Units.
      */
-    getOriginDetails(invoiceId: string): Promise<{
-        itemIndex: number;
-        productId: any;
-        productCode: string;
-        productName: string;
-        quantity: number;
-        origins: any[];
-    }[]>;
+    getOriginDetails(invoiceId: string): Promise<any[]>;
 }
 //# sourceMappingURL=invoice.service.d.ts.map

@@ -9,26 +9,53 @@ class ProductRepository extends base_repository_1.BaseRepository {
         super(models_1.Product);
     }
     async search(query) {
-        const { page = 1, limit = 20, search, sort = 'createdAt', order = 'desc', category, brand, } = query;
+        const { page = 1, limit = 20, search, sort = 'createdAt', order = 'desc', category, brand, noImage, } = query;
         const filter = {};
         if (search && search.trim()) {
-            const searchRegex = new RegExp(search.trim(), 'i');
-            filter.$or = [
-                { name: searchRegex },
-                { productCode: searchRegex },
-                { barcode: searchRegex },
-                { brand: searchRegex },
-                { modelName: searchRegex },
-                { 'specs.cpu': searchRegex },
-                { 'specs.ram': searchRegex },
-                { 'specs.ssd': searchRegex },
-                { 'specs.vga': searchRegex },
-            ];
+            const trimmed = search.trim();
+            const tokens = trimmed.split(/\s+/).filter(Boolean);
+            const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (tokens.length > 1) {
+                filter.$and = tokens.map((token) => {
+                    const tokenRegex = new RegExp(escapeRegex(token), 'i');
+                    return {
+                        $or: [
+                            { name: tokenRegex },
+                            { productCode: tokenRegex },
+                            { barcode: tokenRegex },
+                            { brand: tokenRegex },
+                            { modelName: tokenRegex },
+                            { category: tokenRegex },
+                            { 'specs.cpu': tokenRegex },
+                            { 'specs.ram': tokenRegex },
+                            { 'specs.ssd': tokenRegex },
+                            { 'specs.vga': tokenRegex },
+                        ],
+                    };
+                });
+            }
+            else {
+                const searchRegex = new RegExp(escapeRegex(trimmed), 'i');
+                filter.$or = [
+                    { name: searchRegex },
+                    { productCode: searchRegex },
+                    { barcode: searchRegex },
+                    { brand: searchRegex },
+                    { modelName: searchRegex },
+                    { category: searchRegex },
+                    { 'specs.cpu': searchRegex },
+                    { 'specs.ram': searchRegex },
+                    { 'specs.ssd': searchRegex },
+                    { 'specs.vga': searchRegex },
+                ];
+            }
         }
         if (category)
             filter.category = category;
         if (brand)
             filter.brand = new RegExp(brand, 'i');
+        if (noImage)
+            filter.images = { $size: 0 };
         return this.findPaginated(filter, page, limit, sort, order);
     }
     async getStats() {

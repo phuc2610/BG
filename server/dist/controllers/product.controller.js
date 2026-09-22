@@ -12,12 +12,14 @@ class ProductController {
         const search = req.query.search;
         const category = req.query.category;
         const brand = req.query.brand;
+        const noImage = req.query.noImage === 'true';
         const result = await productService.getAll({
             page,
             limit,
             search,
             category,
             brand,
+            noImage,
         });
         res.json({ success: true, ...result });
     });

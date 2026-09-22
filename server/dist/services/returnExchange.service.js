@@ -69,6 +69,8 @@ class ReturnExchangeService {
                 }
                 // Revert serial unit(s) in InventoryUnit DB
                 const serialsToReturn = (item.selectedSerials || []).filter((s) => s && s.trim());
+                const totalQtyToReturn = item.quantity || 1;
+                let unitsReturnedCount = 0;
                 if (serialsToReturn.length > 0) {
                     const units = await models_1.InventoryUnit.find({
                         serialNumber: { $in: serialsToReturn },
@@ -90,18 +92,22 @@ class ReturnExchangeService {
                             date: now,
                         });
                         await unit.save({ session });
+                        unitsReturnedCount++;
                     }
                 }
-                else {
-                    // Non-serial item return
+                // Return remaining non-serial units (or all units if serialsToReturn was empty)
+                const remainingQtyToReturn = totalQtyToReturn - unitsReturnedCount;
+                if (remainingQtyToReturn > 0) {
                     let productId = item.productId || item.productSnapshot?.productId || item.productSnapshot?._id;
                     if (productId) {
-                        const unit = await models_1.InventoryUnit.findOne({
+                        const nonSerialUnits = await models_1.InventoryUnit.find({
                             productId,
                             soldInvoiceId: invoice._id,
-                        }).session(session);
-                        if (unit) {
-                            originalCostPrice = unit.purchasePrice || 0;
+                        })
+                            .limit(remainingQtyToReturn)
+                            .session(session);
+                        for (const unit of nonSerialUnits) {
+                            originalCostPrice += unit.purchasePrice || 0;
                             unit.status = inventoryStatusTarget;
                             unit.soldInvoiceId = undefined;
                             unit.soldInvoiceCode = undefined;
@@ -116,6 +122,12 @@ class ReturnExchangeService {
                                 date: now,
                             });
                             await unit.save({ session });
+                            unitsReturnedCount++;
+                        }
+                        // Fallback for remaining units if fewer InventoryUnit records were tracked
+                        if (unitsReturnedCount < totalQtyToReturn) {
+                            const fallbackCost = Number(item.productSnapshot?.costPrice) || (nonSerialUnits[0]?.purchasePrice) || 0;
+                            originalCostPrice += fallbackCost * (totalQtyToReturn - unitsReturnedCount);
                         }
                     }
                 }
@@ -279,6 +291,8 @@ class ReturnExchangeService {
                     oldStatusTarget = types_1.InventoryUnitStatus.DAMAGED;
                 }
                 const oldSerials = (oldItem.selectedSerials || []).filter((s) => s && s.trim());
+                const totalOldQtyToReturn = oldItem.quantity || 1;
+                let oldUnitsReturnedCount = 0;
                 if (oldSerials.length > 0) {
                     const oldUnits = await models_1.InventoryUnit.find({
                         serialNumber: { $in: oldSerials },
@@ -300,17 +314,21 @@ class ReturnExchangeService {
                             date: now,
                         });
                         await u.save({ session });
+                        oldUnitsReturnedCount++;
                     }
                 }
-                else {
+                const remainingOldQtyToReturn = totalOldQtyToReturn - oldUnitsReturnedCount;
+                if (remainingOldQtyToReturn > 0) {
                     let oldProdId = oldItem.productId || oldItem.productSnapshot?.productId || oldItem.productSnapshot?._id;
                     if (oldProdId) {
-                        const u = await models_1.InventoryUnit.findOne({
+                        const nonSerialUnits = await models_1.InventoryUnit.find({
                             productId: oldProdId,
                             soldInvoiceId: invoice._id,
-                        }).session(session);
-                        if (u) {
-                            oldCostPrice = u.purchasePrice || 0;
+                        })
+                            .limit(remainingOldQtyToReturn)
+                            .session(session);
+                        for (const u of nonSerialUnits) {
+                            oldCostPrice += u.purchasePrice || 0;
                             u.status = oldStatusTarget;
                             u.soldInvoiceId = undefined;
                             u.soldInvoiceCode = undefined;
@@ -325,6 +343,11 @@ class ReturnExchangeService {
                                 date: now,
                             });
                             await u.save({ session });
+                            oldUnitsReturnedCount++;
+                        }
+                        if (oldUnitsReturnedCount < totalOldQtyToReturn) {
+                            const fallbackCost = Number(oldItem.productSnapshot?.costPrice) || (nonSerialUnits[0]?.purchasePrice) || 0;
+                            oldCostPrice += fallbackCost * (totalOldQtyToReturn - oldUnitsReturnedCount);
                         }
                     }
                 }
@@ -530,6 +553,14 @@ async function recalculateInvoiceFinancials(invoice, session) {
     let activeNetRevenue = 0;
     // Fetch all return & exchange transactions for this invoice
     const transactions = await models_1.ReturnExchangeTransaction.find({ invoiceId: invoice._id }).session(session || null).exec();
+    // Fetch all units linked directly to this invoice (sold or reserved)
+    const linkedUnits = await models_1.InventoryUnit.find({
+        $or: [
+            { soldInvoiceId: invoice._id },
+            { reservedByInvoiceId: invoice._id },
+        ],
+    }).session(session || null).exec();
+    const usedUnitIds = new Set();
     for (let idx = 0; idx < invoice.items.length; idx++) {
         const item = invoice.items[idx];
         const itemStatus = item.itemStatus || 'SOLD';
@@ -540,7 +571,10 @@ async function recalculateInvoiceFinancials(invoice, session) {
         if (selectedSerials.length > 0) {
             const units = await models_1.InventoryUnit.find({ serialNumber: { $in: selectedSerials } }).session(session || null).exec();
             if (units.length > 0) {
-                const foundUnitCost = units.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+                const foundUnitCost = units.reduce((sum, u) => {
+                    usedUnitIds.add(u._id.toString());
+                    return sum + (u.purchasePrice || 0);
+                }, 0);
                 const missingQty = Math.max(0, item.quantity - units.length);
                 const fallbackUnitCost = Number(item.productSnapshot?.costPrice) || 0;
                 itemCostPrice = foundUnitCost + (missingQty * fallbackUnitCost);
@@ -552,17 +586,31 @@ async function recalculateInvoiceFinancials(invoice, session) {
         }
         else {
             let productId = item.productId || item.productSnapshot?.productId || item.productSnapshot?._id;
-            let unitCost = 0;
-            if (productId) {
-                const unit = await models_1.InventoryUnit.findOne({ productId, purchasePrice: { $gt: 0 } }).session(session || null).exec();
-                if (unit && unit.purchasePrice) {
-                    unitCost = unit.purchasePrice;
-                }
+            let productCode = item.productSnapshot?.productCode;
+            // Find units that were specifically sold/reserved for this invoice line
+            const matchedUnits = linkedUnits.filter((u) => {
+                if (usedUnitIds.has(u._id.toString()))
+                    return false;
+                const matchesId = productId && u.productId && u.productId.toString() === productId.toString();
+                const matchesCode = productCode && u.productCode === productCode;
+                return matchesId || matchesCode;
+            });
+            const requiredQty = item.quantity || 1;
+            const unitsForThisItem = matchedUnits.slice(0, requiredQty);
+            for (const u of unitsForThisItem) {
+                usedUnitIds.add(u._id.toString());
             }
-            if (unitCost === 0) {
-                unitCost = Number(item.productSnapshot?.costPrice) || 0;
+            if (unitsForThisItem.length > 0) {
+                const foundCost = unitsForThisItem.reduce((sum, u) => sum + (u.purchasePrice || 0), 0);
+                const missingQty = Math.max(0, requiredQty - unitsForThisItem.length);
+                const fallbackUnitCost = Number(item.productSnapshot?.costPrice) || (unitsForThisItem[0]?.purchasePrice) || 0;
+                itemCostPrice = foundCost + (missingQty * fallbackUnitCost);
             }
-            itemCostPrice = unitCost * item.quantity;
+            else {
+                // Fallback if no linked unit found in DB (e.g. invoice created before unit tracking)
+                const fallbackUnitCost = Number(item.productSnapshot?.costPrice) || 0;
+                itemCostPrice = fallbackUnitCost * requiredQty;
+            }
         }
         if (itemStatus === 'SOLD') {
             activeTotalCost += itemCostPrice;
@@ -600,9 +648,9 @@ async function recalculateInvoiceFinancials(invoice, session) {
             activeNetRevenue += effectiveNetRevenue;
         }
     }
-    // Factor in invoice-level discount and shipping fee
-    const finalRevenue = activeNetRevenue - (invoice.discount || 0) + (invoice.shippingFee || 0);
+    // Factor in invoice-level discount (shipping fee is not included in goods profit)
+    const finalGoodsRevenue = activeNetRevenue - (invoice.discount || 0);
     invoice.totalCost = Math.max(0, activeTotalCost);
-    invoice.profit = finalRevenue - invoice.totalCost;
+    invoice.profit = finalGoodsRevenue - invoice.totalCost;
 }
 //# sourceMappingURL=returnExchange.service.js.map

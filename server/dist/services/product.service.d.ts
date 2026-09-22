@@ -31,7 +31,7 @@ export declare class ProductService {
         images?: any[];
         createdBy?: string;
     }): Promise<IProductDocument>;
-    update(id: string, data: Partial<IProductDocument>): Promise<IProductDocument>;
+    update(id: string, data: any): Promise<IProductDocument>;
     delete(id: string): Promise<IProductDocument | null>;
     clone(id: string): Promise<IProductDocument>;
     uploadImages(productId: string, files: Express.Multer.File[]): Promise<IProductDocument>;

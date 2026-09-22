@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductService = exports.AppError = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const repositories_1 = require("../repositories");
 const models_1 = require("../models");
 const image_service_1 = require("./image.service");
@@ -38,13 +42,22 @@ class ProductService {
         const productId = await (0, models_1.generateProductId)();
         const productCode = await (0, models_1.generateProductCode)(data.category);
         const barcode = `NPC${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-        const initialImages = data.images || [];
+        let initialImages = data.images || [];
         if (data.imageUrl && initialImages.length === 0) {
             initialImages.push({
                 url: data.imageUrl,
                 publicId: data.imagePublicId || `img_${Date.now()}`,
                 isThumbnail: true,
                 order: 0,
+            });
+        }
+        if (Array.isArray(initialImages)) {
+            initialImages = initialImages.map((img) => {
+                const item = { ...img };
+                if (item._id && !mongoose_1.default.Types.ObjectId.isValid(String(item._id))) {
+                    delete item._id;
+                }
+                return item;
             });
         }
         const product = await productRepo.create({
@@ -62,7 +75,20 @@ class ProductService {
         return product;
     }
     async update(id, data) {
-        const product = await productRepo.updateById(id, data);
+        const updateData = { ...data };
+        if (updateData.images && Array.isArray(updateData.images)) {
+            updateData.images = updateData.images.map((img) => {
+                const item = { ...img };
+                if (item._id && !mongoose_1.default.Types.ObjectId.isValid(String(item._id))) {
+                    delete item._id;
+                }
+                return item;
+            });
+        }
+        if (updateData.model && !updateData.modelName) {
+            updateData.modelName = updateData.model;
+        }
+        const product = await productRepo.updateById(id, updateData);
         if (!product)
             throw new AppError('Sản phẩm không tồn tại', 404);
         return product;

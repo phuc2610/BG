@@ -184,6 +184,17 @@ class InvoiceService {
         if (selectedSerials.length > requiredQty) {
             throw new product_service_1.AppError(`Chỉ được chọn tối đa ${requiredQty} Serial cho sản phẩm này`, 400);
         }
+        // Validate that none of the selectedSerials are already selected by another item in this invoice
+        for (let i = 0; i < invoice.items.length; i++) {
+            const otherItem = invoice.items[i];
+            if (i !== itemIndex && otherItem && Array.isArray(otherItem.selectedSerials)) {
+                for (const sn of selectedSerials) {
+                    if (otherItem.selectedSerials.includes(sn)) {
+                        throw new product_service_1.AppError(`Serial ${sn} đã được chọn cho một dòng khác trong hóa đơn này`, 400);
+                    }
+                }
+            }
+        }
         // Previous serials reserved by this invoice line
         const oldSerials = item.selectedSerials || [];
         // Find serials that were unselected (need to release back to AVAILABLE)
@@ -230,7 +241,8 @@ class InvoiceService {
             }
         }
         invoice.totalCost = draftTotalCost;
-        invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - draftTotalCost;
+        const netGoodsRevenue = (invoice.grandTotal - (invoice.vatAmount || 0)) - (invoice.shippingFee || 0);
+        invoice.profit = netGoodsRevenue - draftTotalCost;
         invoice.history.push({
             action: 'CHỌN_SERIAL_NHÁP',
             description: `Chọn ${selectedSerials.length}/${requiredQty} Serial cho ${item.productSnapshot.name}`,
@@ -293,6 +305,8 @@ class InvoiceService {
         const now = new Date();
         const unitsToMarkSold = [];
         const allExportedSerials = [];
+        const chosenUnitIdsSet = new Set(); // Tracks all units chosen across ALL lines in this invoice
+        const allChosenUnitsWithSnapshots = [];
         // 1. Process each item: Ensure sufficient stock, assign available units (with or without serials)
         for (let i = 0; i < invoice.items.length; i++) {
             const item = invoice.items[i];
@@ -308,15 +322,17 @@ class InvoiceService {
                 throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không tìm thấy ID sản phẩm để xuất kho`, 400);
             }
             // Fetch all AVAILABLE or RESERVED units for this product in stock
-            const availableUnits = await models_1.InventoryUnit.find({
+            const rawAvailableUnits = await models_1.InventoryUnit.find({
                 productId,
                 $or: [
                     { status: types_1.InventoryUnitStatus.AVAILABLE },
                     { reservedByInvoiceId: invoice._id },
                 ],
             }).sort({ serialNumber: -1, createdAt: 1 }).exec();
+            // Filter out units that have already been allocated to a preceding line of the same invoice
+            const availableUnits = rawAvailableUnits.filter((u) => !chosenUnitIdsSet.has(u._id.toString()));
             if (availableUnits.length < requiredQty) {
-                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không đủ số lượng tồn kho khả dụng để xuất (Tồn khả dụng: ${availableUnits.length}, Yêu cầu: ${requiredQty})`, 400);
+                throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không đủ số lượng tồn kho khả dụng để xuất (Tồn khả dụng còn lại: ${availableUnits.length}, Yêu cầu: ${requiredQty})`, 400);
             }
             const chosenUnits = [];
             // A. Match explicitly selected serial numbers first (if user picked specific serials in modal)
@@ -327,6 +343,7 @@ class InvoiceService {
                         throw new product_service_1.AppError(`Serial ${sn} của sản phẩm ${item.productSnapshot?.name} không còn ở trạng thái sẵn sàng trong kho`, 400);
                     }
                     chosenUnits.push(match);
+                    chosenUnitIdsSet.add(match._id.toString());
                 }
             }
             // B. Fill remaining quantity from unchosen available units in stock (whether they have serials or not)
@@ -334,7 +351,10 @@ class InvoiceService {
             if (remainingNeeded > 0) {
                 const unchosenAvailable = availableUnits.filter((u) => !chosenUnits.some((c) => c._id.equals(u._id)));
                 const fillUnits = unchosenAvailable.slice(0, remainingNeeded);
-                chosenUnits.push(...fillUnits);
+                for (const u of fillUnits) {
+                    chosenUnits.push(u);
+                    chosenUnitIdsSet.add(u._id.toString());
+                }
             }
             if (chosenUnits.length < requiredQty) {
                 throw new product_service_1.AppError(`Mục ${i + 1} (${item.productSnapshot?.name}): Không tìm đủ đơn vị hàng khả dụng trong kho`, 400);
@@ -343,6 +363,7 @@ class InvoiceService {
             const itemSerials = [];
             for (const u of chosenUnits) {
                 unitsToMarkSold.push(u._id);
+                allChosenUnitsWithSnapshots.push({ unit: u, itemSnapshot: item.productSnapshot });
                 if (u.serialNumber) {
                     itemSerials.push(u.serialNumber);
                     allExportedSerials.push(u.serialNumber);
@@ -354,21 +375,20 @@ class InvoiceService {
             }
         }
         // 2. Calculate actual cost price & profit from chosen physical units
-        const actualUnits = await models_1.InventoryUnit.find({ _id: { $in: unitsToMarkSold } }).exec();
         let actualTotalCost = 0;
-        for (const u of actualUnits) {
+        for (const entry of allChosenUnitsWithSnapshots) {
+            const u = entry.unit;
             if (u.purchasePrice && u.purchasePrice > 0) {
                 actualTotalCost += u.purchasePrice;
             }
             else {
-                const itemMatch = invoice.items.find((it) => (it.productId && u.productId && it.productId.toString() === u.productId.toString()) ||
-                    (u.serialNumber && it.selectedSerials?.includes(u.serialNumber)));
-                const fallbackCost = Number(itemMatch?.productSnapshot?.costPrice) || 0;
+                const fallbackCost = Number(entry.itemSnapshot?.costPrice) || 0;
                 actualTotalCost += fallbackCost;
             }
         }
         invoice.totalCost = actualTotalCost;
-        invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - actualTotalCost;
+        const netGoodsRevenue = (invoice.grandTotal - (invoice.vatAmount || 0)) - (invoice.shippingFee || 0);
+        invoice.profit = netGoodsRevenue - actualTotalCost;
         // 3. Customer payment & debt validation
         if (data?.paidAmount !== undefined) {
             invoice.totalPaid = Number(data.paidAmount);
@@ -552,17 +572,22 @@ class InvoiceService {
             }
         }
         const now = new Date();
+        const assignedUnitIds = new Set();
         // 3. For each invoice item, build origin details
-        const itemOrigins = await Promise.all(invoice.items.map(async (item, idx) => {
+        const itemOrigins = [];
+        for (let idx = 0; idx < invoice.items.length; idx++) {
+            const item = invoice.items[idx];
             const pId = item.productId?.toString() || item.productSnapshot?.productId || item.productSnapshot?._id?.toString();
             const productCode = item.productSnapshot?.productCode;
             const serials = (item.selectedSerials || []).filter((s) => s && s.trim());
+            const neededQty = item.quantity || 1;
             let origins = [];
             // Case A: Has specific serials
             if (serials.length > 0) {
                 for (const sn of serials) {
                     const u = unitMapBySerial.get(sn);
                     if (u) {
+                        assignedUnitIds.add(u._id.toString());
                         const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
                         const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
                         const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
@@ -584,6 +609,7 @@ class InvoiceService {
                     else {
                         const rawU = await models_1.InventoryUnit.findOne({ serialNumber: sn }).lean().exec();
                         if (rawU) {
+                            assignedUnitIds.add(rawU._id.toString());
                             const endDate = rawU.supplierWarrantyEndDate ? new Date(rawU.supplierWarrantyEndDate) : null;
                             const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
                             const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
@@ -619,10 +645,14 @@ class InvoiceService {
                 }
             }
             // Case B: No serials or origins is empty (e.g. Case, Cooler, Bulk, etc.)
-            if (origins.length === 0) {
+            if (origins.length < neededQty) {
+                const remainingNeeded = neededQty - origins.length;
                 const linkedForProduct = (pId ? unitListByProduct.get(pId) : []) || [];
-                if (linkedForProduct.length > 0) {
-                    for (const u of linkedForProduct) {
+                const availableUnitsForLine = linkedForProduct.filter((u) => !assignedUnitIds.has(u._id.toString()));
+                const unitsForThisLine = availableUnitsForLine.slice(0, remainingNeeded);
+                if (unitsForThisLine.length > 0) {
+                    for (const u of unitsForThisLine) {
+                        assignedUnitIds.add(u._id.toString());
                         const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
                         const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
                         const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
@@ -642,7 +672,7 @@ class InvoiceService {
                         });
                     }
                 }
-                else {
+                if (origins.length < neededQty) {
                     // Find recent Purchase receipts for this product
                     const queryConditions = [];
                     if (pId && mongoose_1.default.Types.ObjectId.isValid(pId)) {
@@ -660,6 +690,8 @@ class InvoiceService {
                         : [];
                     if (purchases.length > 0) {
                         for (const p of purchases) {
+                            if (origins.length >= neededQty)
+                                break;
                             const matchedItem = (p.items || []).find((it) => (pId && it.product?.toString() === pId) ||
                                 (productCode && it.productCode === productCode));
                             if (matchedItem) {
@@ -673,22 +705,22 @@ class InvoiceService {
                                     listPrice: matchedItem.listPrice || 0,
                                     condition: matchedItem.condition || 'New',
                                     supplierWarrantyMonths: matchedItem.supplierWarrantyMonths || 0,
-                                    quantity: matchedItem.quantity || 1,
+                                    quantity: 1,
                                 });
                             }
                         }
                     }
                 }
             }
-            return {
+            itemOrigins.push({
                 itemIndex: idx,
                 productId: pId,
                 productCode: item.productSnapshot?.productCode,
                 productName: item.productSnapshot?.name,
                 quantity: item.quantity,
                 origins,
-            };
-        }));
+            });
+        }
         return itemOrigins;
     }
 }

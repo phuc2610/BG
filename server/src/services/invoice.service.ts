@@ -168,6 +168,18 @@ export class InvoiceService {
       throw new AppError(`Chỉ được chọn tối đa ${requiredQty} Serial cho sản phẩm này`, 400);
     }
 
+    // Validate that none of the selectedSerials are already selected by another item in this invoice
+    for (let i = 0; i < invoice.items.length; i++) {
+      const otherItem = invoice.items[i];
+      if (i !== itemIndex && otherItem && Array.isArray(otherItem.selectedSerials)) {
+        for (const sn of selectedSerials) {
+          if (otherItem.selectedSerials.includes(sn)) {
+            throw new AppError(`Serial ${sn} đã được chọn cho một dòng khác trong hóa đơn này`, 400);
+          }
+        }
+      }
+    }
+
     // Previous serials reserved by this invoice line
     const oldSerials = item.selectedSerials || [];
 
@@ -231,7 +243,8 @@ export class InvoiceService {
       }
     }
     invoice.totalCost = draftTotalCost;
-    invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - draftTotalCost;
+    const netGoodsRevenue = (invoice.grandTotal - (invoice.vatAmount || 0)) - (invoice.shippingFee || 0);
+    invoice.profit = netGoodsRevenue - draftTotalCost;
 
     invoice.history.push({
       action: 'CHỌN_SERIAL_NHÁP',
@@ -296,6 +309,8 @@ export class InvoiceService {
     const now = new Date();
     const unitsToMarkSold: mongoose.Types.ObjectId[] = [];
     const allExportedSerials: string[] = [];
+    const chosenUnitIdsSet = new Set<string>(); // Tracks all units chosen across ALL lines in this invoice
+    const allChosenUnitsWithSnapshots: { unit: any; itemSnapshot: any }[] = [];
 
     // 1. Process each item: Ensure sufficient stock, assign available units (with or without serials)
     for (let i = 0; i < invoice.items.length; i++) {
@@ -315,7 +330,7 @@ export class InvoiceService {
       }
 
       // Fetch all AVAILABLE or RESERVED units for this product in stock
-      const availableUnits = await InventoryUnit.find({
+      const rawAvailableUnits = await InventoryUnit.find({
         productId,
         $or: [
           { status: InventoryUnitStatus.AVAILABLE },
@@ -323,9 +338,14 @@ export class InvoiceService {
         ],
       }).sort({ serialNumber: -1, createdAt: 1 }).exec();
 
+      // Filter out units that have already been allocated to a preceding line of the same invoice
+      const availableUnits = rawAvailableUnits.filter(
+        (u) => !chosenUnitIdsSet.has(u._id.toString())
+      );
+
       if (availableUnits.length < requiredQty) {
         throw new AppError(
-          `Mục ${i + 1} (${item.productSnapshot?.name}): Không đủ số lượng tồn kho khả dụng để xuất (Tồn khả dụng: ${availableUnits.length}, Yêu cầu: ${requiredQty})`,
+          `Mục ${i + 1} (${item.productSnapshot?.name}): Không đủ số lượng tồn kho khả dụng để xuất (Tồn khả dụng còn lại: ${availableUnits.length}, Yêu cầu: ${requiredQty})`,
           400
         );
       }
@@ -345,6 +365,7 @@ export class InvoiceService {
             );
           }
           chosenUnits.push(match);
+          chosenUnitIdsSet.add(match._id.toString());
         }
       }
 
@@ -355,7 +376,10 @@ export class InvoiceService {
           (u) => !chosenUnits.some((c) => (c._id as any).equals(u._id))
         );
         const fillUnits = unchosenAvailable.slice(0, remainingNeeded);
-        chosenUnits.push(...fillUnits);
+        for (const u of fillUnits) {
+          chosenUnits.push(u);
+          chosenUnitIdsSet.add(u._id.toString());
+        }
       }
 
       if (chosenUnits.length < requiredQty) {
@@ -366,6 +390,7 @@ export class InvoiceService {
       const itemSerials: string[] = [];
       for (const u of chosenUnits) {
         unitsToMarkSold.push(u._id as any);
+        allChosenUnitsWithSnapshots.push({ unit: u, itemSnapshot: item.productSnapshot });
         if (u.serialNumber) {
           itemSerials.push(u.serialNumber);
           allExportedSerials.push(u.serialNumber);
@@ -379,22 +404,19 @@ export class InvoiceService {
     }
 
     // 2. Calculate actual cost price & profit from chosen physical units
-    const actualUnits = await InventoryUnit.find({ _id: { $in: unitsToMarkSold } }).exec();
     let actualTotalCost = 0;
-    for (const u of actualUnits) {
+    for (const entry of allChosenUnitsWithSnapshots) {
+      const u = entry.unit;
       if (u.purchasePrice && u.purchasePrice > 0) {
         actualTotalCost += u.purchasePrice;
       } else {
-        const itemMatch = invoice.items.find((it) =>
-          (it.productId && u.productId && it.productId.toString() === u.productId.toString()) ||
-          (u.serialNumber && it.selectedSerials?.includes(u.serialNumber))
-        );
-        const fallbackCost = Number((itemMatch?.productSnapshot as any)?.costPrice) || 0;
+        const fallbackCost = Number((entry.itemSnapshot as any)?.costPrice) || 0;
         actualTotalCost += fallbackCost;
       }
     }
     invoice.totalCost = actualTotalCost;
-    invoice.profit = (invoice.grandTotal - (invoice.vatAmount || 0)) - actualTotalCost;
+    const netGoodsRevenue = (invoice.grandTotal - (invoice.vatAmount || 0)) - (invoice.shippingFee || 0);
+    invoice.profit = netGoodsRevenue - actualTotalCost;
 
     // 3. Customer payment & debt validation
     if (data?.paidAmount !== undefined) {
@@ -625,154 +647,166 @@ export class InvoiceService {
     }
 
     const now = new Date();
+    const assignedUnitIds = new Set<string>();
 
     // 3. For each invoice item, build origin details
-    const itemOrigins = await Promise.all(
-      invoice.items.map(async (item, idx) => {
-        const pId = item.productId?.toString() || (item.productSnapshot as any)?.productId || (item.productSnapshot as any)?._id?.toString();
-        const productCode = item.productSnapshot?.productCode;
-        const serials = (item.selectedSerials || []).filter((s) => s && s.trim());
+    const itemOrigins: any[] = [];
+    for (let idx = 0; idx < invoice.items.length; idx++) {
+      const item = invoice.items[idx];
+      const pId = item.productId?.toString() || (item.productSnapshot as any)?.productId || (item.productSnapshot as any)?._id?.toString();
+      const productCode = item.productSnapshot?.productCode;
+      const serials = (item.selectedSerials || []).filter((s) => s && s.trim());
+      const neededQty = item.quantity || 1;
 
-        let origins: any[] = [];
+      let origins: any[] = [];
 
-        // Case A: Has specific serials
-        if (serials.length > 0) {
-          for (const sn of serials) {
-            const u = unitMapBySerial.get(sn);
-            if (u) {
-              const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
+      // Case A: Has specific serials
+      if (serials.length > 0) {
+        for (const sn of serials) {
+          const u = unitMapBySerial.get(sn);
+          if (u) {
+            assignedUnitIds.add(u._id.toString());
+            const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
+            const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
+            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+
+            origins.push({
+              sourceType: 'SERIAL',
+              serialNumber: u.serialNumber,
+              purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
+              supplierName: u.supplierName || 'NCC N/A',
+              purchaseDate: u.purchaseDate || u.createdAt,
+              purchasePrice: u.purchasePrice || 0,
+              listPrice: u.listPrice || 0,
+              condition: u.condition || 'New',
+              supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
+              supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+              remainingWarrantyDays: remainingDays,
+              quantity: 1,
+            });
+          } else {
+            const rawU = await InventoryUnit.findOne({ serialNumber: sn }).lean().exec();
+            if (rawU) {
+              assignedUnitIds.add(rawU._id.toString());
+              const endDate = rawU.supplierWarrantyEndDate ? new Date(rawU.supplierWarrantyEndDate) : null;
               const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
               const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
 
               origins.push({
                 sourceType: 'SERIAL',
-                serialNumber: u.serialNumber,
-                purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
-                supplierName: u.supplierName || 'NCC N/A',
-                purchaseDate: u.purchaseDate || u.createdAt,
-                purchasePrice: u.purchasePrice || 0,
-                listPrice: u.listPrice || 0,
-                condition: u.condition || 'New',
-                supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
-                supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+                serialNumber: rawU.serialNumber,
+                purchaseCode: rawU.purchaseCode || 'PNK (Chưa gán)',
+                supplierName: rawU.supplierName || 'NCC N/A',
+                purchaseDate: rawU.purchaseDate || rawU.createdAt,
+                purchasePrice: rawU.purchasePrice || 0,
+                listPrice: rawU.listPrice || 0,
+                condition: rawU.condition || 'New',
+                supplierWarrantyMonths: rawU.supplierWarrantyMonths || 0,
+                supplierWarrantyEndDate: rawU.supplierWarrantyEndDate,
                 remainingWarrantyDays: remainingDays,
                 quantity: 1,
               });
             } else {
-              const rawU = await InventoryUnit.findOne({ serialNumber: sn }).lean().exec();
-              if (rawU) {
-                const endDate = rawU.supplierWarrantyEndDate ? new Date(rawU.supplierWarrantyEndDate) : null;
-                const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
-                const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
-
-                origins.push({
-                  sourceType: 'SERIAL',
-                  serialNumber: rawU.serialNumber,
-                  purchaseCode: rawU.purchaseCode || 'PNK (Chưa gán)',
-                  supplierName: rawU.supplierName || 'NCC N/A',
-                  purchaseDate: rawU.purchaseDate || rawU.createdAt,
-                  purchasePrice: rawU.purchasePrice || 0,
-                  listPrice: rawU.listPrice || 0,
-                  condition: rawU.condition || 'New',
-                  supplierWarrantyMonths: rawU.supplierWarrantyMonths || 0,
-                  supplierWarrantyEndDate: rawU.supplierWarrantyEndDate,
-                  remainingWarrantyDays: remainingDays,
-                  quantity: 1,
-                });
-              } else {
-                origins.push({
-                  sourceType: 'SERIAL',
-                  serialNumber: sn,
-                  purchaseCode: 'PNK (Chưa gán)',
-                  supplierName: 'NCC N/A',
-                  purchaseDate: invoice.createdDate,
-                  purchasePrice: 0,
-                  listPrice: 0,
-                  condition: 'New',
-                  quantity: 1,
-                });
-              }
-            }
-          }
-        }
-
-        // Case B: No serials or origins is empty (e.g. Case, Cooler, Bulk, etc.)
-        if (origins.length === 0) {
-          const linkedForProduct = (pId ? unitListByProduct.get(pId) : []) || [];
-          if (linkedForProduct.length > 0) {
-            for (const u of linkedForProduct) {
-              const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
-              const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
-              const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
-
               origins.push({
-                sourceType: 'UNIT_NO_SERIAL',
-                serialNumber: u.serialNumber || '— (Không dùng S/N)',
-                purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
-                supplierName: u.supplierName || 'NCC N/A',
-                purchaseDate: u.purchaseDate || u.createdAt,
-                purchasePrice: u.purchasePrice || 0,
-                listPrice: u.listPrice || 0,
-                condition: u.condition || 'New',
-                supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
-                supplierWarrantyEndDate: u.supplierWarrantyEndDate,
-                remainingWarrantyDays: remainingDays,
+                sourceType: 'SERIAL',
+                serialNumber: sn,
+                purchaseCode: 'PNK (Chưa gán)',
+                supplierName: 'NCC N/A',
+                purchaseDate: invoice.createdDate,
+                purchasePrice: 0,
+                listPrice: 0,
+                condition: 'New',
                 quantity: 1,
               });
             }
-          } else {
-            // Find recent Purchase receipts for this product
-            const queryConditions: any[] = [];
-            if (pId && mongoose.Types.ObjectId.isValid(pId)) {
-              queryConditions.push({ 'items.product': new mongoose.Types.ObjectId(pId) });
-            }
-            if (productCode) {
-              queryConditions.push({ 'items.productCode': productCode });
-            }
+          }
+        }
+      }
 
-            const purchases = queryConditions.length > 0
-              ? await Purchase.find({ $or: queryConditions, isDraft: { $ne: true } })
-                  .sort({ purchaseDate: -1 })
-                  .limit(5)
-                  .lean()
-                  .exec()
-              : [];
+      // Case B: No serials or origins is empty (e.g. Case, Cooler, Bulk, etc.)
+      if (origins.length < neededQty) {
+        const remainingNeeded = neededQty - origins.length;
+        const linkedForProduct = (pId ? unitListByProduct.get(pId) : []) || [];
+        const availableUnitsForLine = linkedForProduct.filter((u) => !assignedUnitIds.has(u._id.toString()));
+        const unitsForThisLine = availableUnitsForLine.slice(0, remainingNeeded);
 
-            if (purchases.length > 0) {
-              for (const p of purchases) {
-                const matchedItem = (p.items || []).find((it: any) =>
-                  (pId && it.product?.toString() === pId) ||
-                  (productCode && it.productCode === productCode)
-                );
-                if (matchedItem) {
-                  origins.push({
-                    sourceType: 'PURCHASE_RECEIPT',
-                    serialNumber: '— (Theo phiếu nhập)',
-                    purchaseCode: p.purchaseCode,
-                    supplierName: p.supplier?.name || p.supplier?.companyName || 'NCC N/A',
-                    purchaseDate: p.purchaseDate,
-                    purchasePrice: matchedItem.costPrice || 0,
-                    listPrice: matchedItem.listPrice || 0,
-                    condition: matchedItem.condition || 'New',
-                    supplierWarrantyMonths: matchedItem.supplierWarrantyMonths || 0,
-                    quantity: matchedItem.quantity || 1,
-                  });
-                }
+        if (unitsForThisLine.length > 0) {
+          for (const u of unitsForThisLine) {
+            assignedUnitIds.add(u._id.toString());
+            const endDate = u.supplierWarrantyEndDate ? new Date(u.supplierWarrantyEndDate) : null;
+            const diffTime = endDate ? endDate.getTime() - now.getTime() : 0;
+            const remainingDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+
+            origins.push({
+              sourceType: 'UNIT_NO_SERIAL',
+              serialNumber: u.serialNumber || '— (Không dùng S/N)',
+              purchaseCode: u.purchaseCode || 'PNK (Chưa gán)',
+              supplierName: u.supplierName || 'NCC N/A',
+              purchaseDate: u.purchaseDate || u.createdAt,
+              purchasePrice: u.purchasePrice || 0,
+              listPrice: u.listPrice || 0,
+              condition: u.condition || 'New',
+              supplierWarrantyMonths: u.supplierWarrantyMonths || 0,
+              supplierWarrantyEndDate: u.supplierWarrantyEndDate,
+              remainingWarrantyDays: remainingDays,
+              quantity: 1,
+            });
+          }
+        }
+
+        if (origins.length < neededQty) {
+          // Find recent Purchase receipts for this product
+          const queryConditions: any[] = [];
+          if (pId && mongoose.Types.ObjectId.isValid(pId)) {
+            queryConditions.push({ 'items.product': new mongoose.Types.ObjectId(pId) });
+          }
+          if (productCode) {
+            queryConditions.push({ 'items.productCode': productCode });
+          }
+
+          const purchases = queryConditions.length > 0
+            ? await Purchase.find({ $or: queryConditions, isDraft: { $ne: true } })
+                .sort({ purchaseDate: -1 })
+                .limit(5)
+                .lean()
+                .exec()
+            : [];
+
+          if (purchases.length > 0) {
+            for (const p of purchases) {
+              if (origins.length >= neededQty) break;
+              const matchedItem = (p.items || []).find((it: any) =>
+                (pId && it.product?.toString() === pId) ||
+                (productCode && it.productCode === productCode)
+              );
+              if (matchedItem) {
+                origins.push({
+                  sourceType: 'PURCHASE_RECEIPT',
+                  serialNumber: '— (Theo phiếu nhập)',
+                  purchaseCode: p.purchaseCode,
+                  supplierName: p.supplier?.name || p.supplier?.companyName || 'NCC N/A',
+                  purchaseDate: p.purchaseDate,
+                  purchasePrice: matchedItem.costPrice || 0,
+                  listPrice: matchedItem.listPrice || 0,
+                  condition: matchedItem.condition || 'New',
+                  supplierWarrantyMonths: matchedItem.supplierWarrantyMonths || 0,
+                  quantity: 1,
+                });
               }
             }
           }
         }
+      }
 
-        return {
-          itemIndex: idx,
-          productId: pId,
-          productCode: item.productSnapshot?.productCode,
-          productName: item.productSnapshot?.name,
-          quantity: item.quantity,
-          origins,
-        };
-      })
-    );
+      itemOrigins.push({
+        itemIndex: idx,
+        productId: pId,
+        productCode: item.productSnapshot?.productCode,
+        productName: item.productSnapshot?.name,
+        quantity: item.quantity,
+        origins,
+      });
+    }
 
     return itemOrigins;
   }

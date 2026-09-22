@@ -291,7 +291,8 @@ class QuoteService {
         const afterDiscount = Math.max(0, rawSubtotal - totalDiscountAmount);
         const vatAmount = vatEnabled ? (afterDiscount * vatPercent) / 100 : 0;
         const grandTotal = afterDiscount + shippingFee + vatAmount;
-        const profit = (grandTotal - vatAmount) - totalCost;
+        // Lợi nhuận không bao gồm VAT và tiền vận chuyển (tiền ship trả cho bên giao hàng)
+        const profit = afterDiscount - totalCost;
         return {
             subtotal: rawSubtotal,
             vatAmount,
