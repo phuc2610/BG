@@ -17,6 +17,7 @@ interface ProductStore {
     brand?: string;
     minPrice?: number;
     maxPrice?: number;
+    noImage?: boolean;
   };
 
   setViewMode: (mode: ViewMode) => void;
@@ -69,6 +70,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
       if (filters.brand) params.brand = filters.brand;
       if (filters.minPrice) params.minPrice = filters.minPrice;
       if (filters.maxPrice) params.maxPrice = filters.maxPrice;
+      if (filters.noImage) params.noImage = true;
 
       const res = await api.get('/products', { params });
       set({

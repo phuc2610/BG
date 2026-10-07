@@ -9,16 +9,21 @@ import {
   CheckCircle,
   Building2,
   Package,
+  ScanLine,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { InventoryUnitRecord } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
+import { WarrantyLookupModal } from '@/components/warranty/WarrantyLookupModal';
 
 export function SupplierWarranty() {
   const [units, setUnits] = useState<InventoryUnitRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [warrantyFilter, setWarrantyFilter] = useState<'all' | 'valid' | 'due_soon' | 'expired'>('all');
+  const [isLookupModalOpen, setIsLookupModalOpen] = useState(false);
+  const [modalSerial, setModalSerial] = useState<string | undefined>(undefined);
+  const [modalBrand, setModalBrand] = useState<string | undefined>(undefined);
 
   const fetchWarranties = async () => {
     try {
@@ -69,13 +74,28 @@ export function SupplierWarranty() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[rgb(var(--foreground))]">
-          Quản Lý Bảo Hành Nhà Cung Cấp
-        </h1>
-        <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
-          Theo dõi thời hạn bảo hành của từng Serial thiết bị mua từ Nhà cung cấp
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[rgb(var(--foreground))]">
+            Quản Lý Bảo Hành Nhà Cung Cấp
+          </h1>
+          <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
+            Theo dõi thời hạn bảo hành của từng Serial thiết bị mua từ Nhà cung cấp
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setModalSerial(undefined);
+            setModalBrand(undefined);
+            setIsLookupModalOpen(true);
+          }}
+          className="px-4 py-2.5 rounded-xl bg-[rgb(var(--primary))] hover:bg-[rgb(var(--primary))]/90 text-white text-xs font-bold transition-all shadow flex items-center gap-2 self-start sm:self-auto"
+        >
+          <ScanLine className="w-4 h-4" />
+          Tra Cứu Bảo Hành (OCR)
+        </button>
       </div>
 
       {/* Filter & Search Bar */}
@@ -127,7 +147,52 @@ export function SupplierWarranty() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile Card List */}
+          <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+            {units.map((u) => (
+              <div key={u._id} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono font-bold text-xs text-blue-500">{u.serialNumber}</p>
+                    <p className="font-semibold text-xs mt-1">{u.productName}</p>
+                    <p className="font-mono text-[10px] text-[rgb(var(--muted-foreground))]">{u.productCode}</p>
+                  </div>
+                  <span
+                    className={`text-[10px] px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
+                      u.status === 'AVAILABLE'
+                        ? 'bg-emerald-500/10 text-emerald-500'
+                        : u.status === 'RESERVED'
+                        ? 'bg-amber-500/10 text-amber-500'
+                        : 'bg-blue-500/10 text-blue-500'
+                    }`}
+                  >
+                    {u.status === 'AVAILABLE' ? 'Còn hàng' : u.status === 'RESERVED' ? 'Đang giữ (HĐ)' : 'Đã bán'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-[rgb(var(--muted-foreground))] mt-2">
+                  NCC: <strong className="text-[rgb(var(--foreground))]">{u.supplierName || 'N/A'}</strong> • Nhập: {formatDate(u.purchaseDate)}
+                </p>
+
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-[rgb(var(--border))]">
+                  <div className="text-xs">
+                    <span className="text-[rgb(var(--muted-foreground))]">BH {u.supplierWarrantyMonths} tháng, hết hạn </span>
+                    <span className="font-semibold">{formatDate(u.supplierWarrantyEndDate)}</span>
+                  </div>
+                  {u.warrantyStatus === 'EXPIRED' ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-500/10 text-red-500 flex-shrink-0">Hết BH</span>
+                  ) : (
+                    <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0', u.warrantyStatus === 'DUE_SOON' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500')}>
+                      Còn {u.remainingWarrantyDays} ngày
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                 <tr>
@@ -139,6 +204,7 @@ export function SupplierWarranty() {
                   <th className="px-5 py-3.5">Ngày Hết Hạn</th>
                   <th className="px-5 py-3.5 text-center">Số Ngày Còn Lại</th>
                   <th className="px-5 py-3.5 text-center">Trạng Thái Unit</th>
+                  <th className="px-5 py-3.5 text-right">Tra Cứu</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--border))]">
@@ -199,13 +265,41 @@ export function SupplierWarranty() {
                           : 'Đã bán'}
                       </span>
                     </td>
+                    <td className="px-5 py-4 text-right">
+                      {u.serialNumber ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalSerial(u.serialNumber);
+                            setModalBrand(u.productName);
+                            setIsLookupModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-[rgb(var(--muted))] hover:bg-[rgb(var(--primary))]/10 text-[rgb(var(--primary))] text-xs font-semibold transition-colors inline-flex items-center gap-1"
+                          title="Tra cứu bảo hành online"
+                        >
+                          <ScanLine className="w-3.5 h-3.5" />
+                          Tra cứu
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[rgb(var(--muted-foreground))]">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+
+      {/* Warranty Lookup Modal */}
+      <WarrantyLookupModal
+        isOpen={isLookupModalOpen}
+        onClose={() => setIsLookupModalOpen(false)}
+        initialSerial={modalSerial}
+        initialBrand={modalBrand}
+      />
     </div>
   );
 }

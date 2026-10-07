@@ -25,6 +25,7 @@ import supplierRoutes from './routes/supplier.routes';
 import purchaseRoutes from './routes/purchase.routes';
 import inventoryUnitRoutes from './routes/inventoryUnit.routes';
 import aiRoutes from './routes/ai.routes';
+import warrantyRoutes from './routes/warranty.routes';
 import { authenticateUser } from './middleware/auth.middleware';
 
 const app = express();
@@ -67,6 +68,7 @@ app.use('/api/debts', authenticateUser, debtRoutes);
 app.use('/api/dashboard', authenticateUser, dashboardRoutes);
 app.use('/api/settings', authenticateUser, settingsRoutes);
 app.use('/api/ai', authenticateUser, aiRoutes);
+app.use('/api/warranty', authenticateUser, warrantyRoutes);
 app.use('/api/pdf', pdfRoutes);
 
 // Health check

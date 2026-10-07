@@ -20,7 +20,7 @@ import {
 import api from '@/lib/api';
 import { PaymentMethod } from '@/types';
 import type { PurchaseRecord, PurchaseStats } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
 
 export function Purchases() {
   const navigate = useNavigate();
@@ -247,7 +247,119 @@ export function Purchases() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile Card List */}
+          <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+            {purchases.map((p) => {
+              const daysDiff = p.dueDate ? Math.ceil((new Date(p.dueDate).getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+              const isOverdue = daysDiff !== null && daysDiff < 0;
+              const isDraftP = p.isDraft || p.status === 'DRAFT';
+
+              return (
+                <div
+                  key={p._id}
+                  onClick={() => setViewPurchaseDetail(p)}
+                  className="p-4 active:bg-[rgb(var(--accent))/40] cursor-pointer transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono font-bold text-xs text-blue-500">{p.purchaseCode}</p>
+                      <p className="font-semibold text-sm mt-1">{p.supplier?.name}</p>
+                      {p.supplier?.phone && <p className="text-xs text-[rgb(var(--muted-foreground))]">{p.supplier.phone}</p>}
+                      <p className="text-xs text-[rgb(var(--muted-foreground))] mt-0.5">{formatDate(p.purchaseDate)}</p>
+                    </div>
+                    <span
+                      className={`text-[10px] px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
+                        isDraftP
+                          ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30 font-bold'
+                          : p.status === 'PAID'
+                          ? 'bg-emerald-500/10 text-emerald-500'
+                          : p.status === 'PARTIALLY_PAID'
+                          ? 'bg-amber-500/10 text-amber-500'
+                          : 'bg-red-500/10 text-red-500'
+                      }`}
+                    >
+                      {isDraftP ? '📝 Nháp' : p.status === 'PAID' ? 'Đã trả đủ' : p.status === 'PARTIALLY_PAID' ? 'Trả 1 phần' : 'Chưa trả'}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[rgb(var(--muted-foreground))] mt-2 truncate">
+                    {p.items?.map((it) => `${it.productName} (${it.quantity})`).join(', ')}
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng Tiền</p>
+                      <p className="text-xs font-medium">{formatCurrency(p.totalAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Trả</p>
+                      <p className="text-xs font-medium text-emerald-500">{formatCurrency(p.paidAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                      <p className={cn('text-xs font-semibold', p.remainingAmount > 0 ? 'text-amber-500' : 'text-[rgb(var(--muted-foreground))]')}>
+                        {formatCurrency(p.remainingAmount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {p.remainingAmount > 0 && p.dueDate && (
+                    <div className="mt-2">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 ${
+                          isOverdue
+                            ? 'bg-red-500/10 text-red-500 border border-red-500/30'
+                            : 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
+                        }`}
+                      >
+                        {isOverdue ? `🚨 Quá hạn ${Math.abs(daysDiff!)} ngày` : `⏳ Hạn: ${formatDate(p.dueDate)} (Còn ${daysDiff}d)`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-[rgb(var(--border))]" onClick={(e) => e.stopPropagation()}>
+                    {isDraftP ? (
+                      <>
+                        <button
+                          onClick={() => navigate(`/purchases/edit/${p._id}`)}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/30 flex items-center gap-1"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          Sửa / Duyệt
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDraft(p._id)}
+                          className="p-2 rounded-lg text-red-500 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => setViewPurchaseDetail(p)} className="p-2 rounded-lg text-blue-500 hover:bg-blue-500/10">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => navigate(`/purchases/edit/${p._id}`)} className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        {p.remainingAmount > 0 && (
+                          <button
+                            onClick={() => { setSelectedPurchase(p); setPaymentAmount(p.remainingAmount); }}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-500"
+                          >
+                            Trả NCC
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                 <tr>
@@ -417,6 +529,7 @@ export function Purchases() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -600,7 +713,32 @@ export function Purchases() {
                 <h4 className="font-bold text-xs uppercase tracking-wider text-[rgb(var(--muted-foreground))]">
                   Danh Sách Sản Phẩm & Serial Nhập Vào Kho ({viewPurchaseDetail.items?.length || 0})
                 </h4>
-                <div className="rounded-xl border border-[rgb(var(--border))] overflow-hidden">
+                {/* Mobile Card List */}
+                <div className="md:hidden space-y-2">
+                  {viewPurchaseDetail.items?.map((it, idx) => (
+                    <div key={idx} className="rounded-xl border border-[rgb(var(--border))] p-3 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold">{it.productName}</p>
+                          <p className="font-mono text-[10px] text-blue-500">{it.productCode}</p>
+                        </div>
+                        <p className="font-bold text-right flex-shrink-0">{formatCurrency(it.total)}</p>
+                      </div>
+                      <p className="text-[rgb(var(--muted-foreground))] mt-1">SL: <strong>{it.quantity}</strong> • Giá nhập: <strong>{formatCurrency(it.costPrice)}</strong></p>
+                      {it.serials && it.serials.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {it.serials.map((s) => (
+                            <span key={s} className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 font-semibold border border-blue-500/20">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block rounded-xl border border-[rgb(var(--border))] overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[rgb(var(--muted))/50] border-b border-[rgb(var(--border))] font-semibold text-[rgb(var(--muted-foreground))]">
                       <tr>
@@ -666,7 +804,25 @@ export function Purchases() {
                     Chưa có lượt thanh toán nào cho phiếu nhập này
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-[rgb(var(--border))] overflow-hidden">
+                  <>
+                  {/* Mobile Card List */}
+                  <div className="md:hidden space-y-2">
+                    {viewPurchaseDetail.payments.map((pm, pidx) => (
+                      <div key={pidx} className="rounded-xl border border-[rgb(var(--border))] p-3 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-mono font-bold text-blue-500">{pm.paymentCode}</p>
+                            <p className="text-[rgb(var(--muted-foreground))] mt-0.5">{formatDate(pm.paymentDate)}</p>
+                          </div>
+                          <p className="font-bold text-emerald-500">{formatCurrency(pm.amount)}</p>
+                        </div>
+                        <p className="mt-1.5">{pm.paymentMethod} {pm.bankName ? `(${pm.bankName})` : ''}</p>
+                        {pm.note && <p className="text-[rgb(var(--muted-foreground))] mt-0.5 italic">{pm.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="hidden md:block rounded-xl border border-[rgb(var(--border))] overflow-hidden">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[rgb(var(--muted))/50] border-b border-[rgb(var(--border))] font-semibold text-[rgb(var(--muted-foreground))]">
                         <tr>
@@ -694,6 +850,7 @@ export function Purchases() {
                       </tbody>
                     </table>
                   </div>
+                  </>
                 )}
               </div>
             </div>

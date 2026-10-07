@@ -487,7 +487,7 @@ export function ProductAiImagePicker({
                   </div>
 
                   {/* Placeholder Skeletons */}
-                  <div className="grid grid-cols-3 gap-3 pt-4 max-w-xl mx-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 max-w-xl mx-auto">
                     {[1, 2, 3].map((n) => (
                       <div
                         key={n}

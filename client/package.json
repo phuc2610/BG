@@ -28,6 +28,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.27.0",
+    "postcss-selector-parser": "^7.1.6",
     "react-dropzone": "^19.1.1",
     "react-easy-crop": "^6.2.3",
     "react-hook-form": "^7.83.0",

@@ -32,7 +32,7 @@ import {
 import api from '@/lib/api';
 import { ProductCategory, ProductCondition } from '@/types';
 import type { InventoryGroupedProduct, InventoryUnitRecord } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
 
 export function Inventory() {
   const navigate = useNavigate();
@@ -536,7 +536,123 @@ export function Inventory() {
                   Không có Serial nào khớp với bộ lọc
                 </div>
               ) : (
-                <div className="rounded-xl border border-[rgb(var(--border))] overflow-hidden">
+                <>
+                {/* Mobile Card List */}
+                <div className="md:hidden space-y-3">
+                  {filteredUnits.map((u) => (
+                    <div key={u._id} className="rounded-xl border border-[rgb(var(--border))] p-3.5 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-mono font-bold text-blue-500">
+                            {u.serialNumber || <span className="text-[rgb(var(--muted-foreground))] italic">Không có Serial</span>}
+                          </p>
+                          <p className="text-[rgb(var(--muted-foreground))] mt-0.5">{u.supplierName || 'NCC N/A'} • {formatDate(u.purchaseDate)}</p>
+                        </div>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full font-semibold text-[10px] flex-shrink-0 ${
+                            u.status === 'AVAILABLE'
+                              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                              : u.status === 'RESERVED'
+                              ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                              : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                          }`}
+                        >
+                          {u.status === 'AVAILABLE' ? 'Còn hàng' : u.status === 'RESERVED' ? 'Đang giữ (HĐ)' : 'Đã bán'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Giá Nhập</p>
+                          <p className="font-semibold">{formatCurrency(u.purchasePrice)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Giá Niêm Yết</p>
+                          {editingListPriceId === u._id ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <input
+                                type="number"
+                                min={0}
+                                value={tempListPrice}
+                                onChange={(e) => setTempListPrice(Number(e.target.value))}
+                                className="w-20 px-1.5 py-1 text-xs rounded bg-[rgb(var(--background))] border border-emerald-500 text-emerald-500 font-bold focus:outline-none"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={savingListPrice}
+                                onClick={() => handleSaveListPrice(u._id)}
+                                className="px-1.5 py-1 text-[10px] rounded bg-emerald-500 text-white font-bold hover:bg-emerald-600"
+                              >
+                                Lưu
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingListPriceId(null)}
+                                className="px-1.5 py-1 text-[10px] rounded bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))]"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingListPriceId(u._id);
+                                setTempListPrice(u.listPrice || u.purchasePrice || 0);
+                              }}
+                              className="font-bold text-emerald-500 inline-flex items-center gap-1"
+                            >
+                              {formatCurrency(u.listPrice || u.purchasePrice || 0)}
+                              <Edit className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgb(var(--border))]">
+                        <div>
+                          <span className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">BH NCC: </span>
+                          <span>{u.supplierWarrantyMonths} tháng</span>
+                          {u.warrantyStatus === 'EXPIRED' ? (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 font-bold">Hết BH</span>
+                          ) : (
+                            <span className={cn('ml-1 text-[10px] px-1.5 py-0.5 rounded font-semibold', u.warrantyStatus === 'DUE_SOON' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500')}>
+                              Còn {u.remainingWarrantyDays} ngày
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {u.customerInfo && (
+                        <div className="flex items-center flex-wrap gap-2 mt-2 pt-2 border-t border-[rgb(var(--border))]">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setSelectedCustomerInfo(u.customerInfo || null); }}
+                            className="font-semibold text-purple-400 hover:underline inline-flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20"
+                          >
+                            <User className="w-3 h-3" />
+                            {u.customerInfo.customerName}
+                          </button>
+                          {u.customerInfo.invoiceCode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/invoices/${u.customerInfo?.invoiceId || u.soldInvoiceId || u.reservedByInvoiceId}`);
+                              }}
+                              className="font-mono text-[rgb(var(--muted-foreground))] hover:text-blue-500"
+                            >
+                              HĐ: {u.customerInfo.invoiceCode}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block rounded-xl border border-[rgb(var(--border))] overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] font-semibold uppercase border-b border-[rgb(var(--border))]">
                       <tr>
@@ -679,6 +795,7 @@ export function Inventory() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </div>

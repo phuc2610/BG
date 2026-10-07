@@ -1,3 +1,21 @@
+# Environment & Secrets (TUYỆT ĐỐI KHÔNG COMMIT LÊN GIT)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pub
+.ssh/
+
+# Agent Rules & Sensitive Server Configs
+.agents/
+
+# IDE & Editor files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
 # Dependencies
 node_modules/
 client/node_modules/
@@ -9,8 +27,11 @@ client/dist/
 server/dist/
 build/
 
-# Temporary update archives
-update.tar.gz
+# Temporary files, caches & archives
+.tmp/
+*.tar.gz
+*.zip
+*.tgz
 
 # Logs
 *.log
@@ -18,8 +39,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS & Editor files
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+# Test artifacts & Screenshots
+server/scripts/*.png
+server/scripts/*.jpg
+server/scripts/*.jpeg

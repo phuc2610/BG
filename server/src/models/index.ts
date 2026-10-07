@@ -10,4 +10,5 @@ export * from './counter.model';
 export * from './settings.model';
 export * from './user.model';
 export * from './returnExchange.model';
+export * from './warrantyCheckHistory.model';
 

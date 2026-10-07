@@ -105,7 +105,7 @@ export function Invoices() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Hóa Đơn Bán Hàng</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
@@ -152,13 +152,13 @@ export function Invoices() {
 
           <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Giá Trị TB / ĐƠN</span>
+              <span className="text-xs font-semibold text-[rgb(var(--muted-foreground))] uppercase">Lợi Nhuận</span>
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
                 <DollarSign className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-xl font-extrabold text-[rgb(var(--foreground))] mt-2">{formatCurrency(stats.averageInvoiceValue)}</p>
-            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Giá trị trung bình mỗi hóa đơn</p>
+            <p className="text-xl font-extrabold text-purple-400 mt-2">{formatCurrency(stats.totalProfit || 0)}</p>
+            <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1">Tổng lợi nhuận thực tế</p>
           </div>
         </div>
       )}
@@ -167,16 +167,17 @@ export function Invoices() {
       <div className="p-4 rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap border-b border-[rgb(var(--border))] pb-3">
           {/* Quick Date Presets */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-[rgb(var(--muted-foreground))] mr-1 flex items-center gap-1">
+          <div className="flex items-center gap-1.5 min-w-0 w-full sm:w-auto">
+            <span className="text-xs font-bold text-[rgb(var(--muted-foreground))] mr-1 flex items-center gap-1 flex-shrink-0">
               <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              Lọc doanh thu:
+              <span className="hidden sm:inline">Lọc doanh thu:</span>
             </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
             <button
               type="button"
               onClick={() => handlePresetChange('all')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'all'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -188,7 +189,7 @@ export function Invoices() {
               type="button"
               onClick={() => handlePresetChange('today')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'today'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -200,7 +201,7 @@ export function Invoices() {
               type="button"
               onClick={() => handlePresetChange('yesterday')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'yesterday'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -212,7 +213,7 @@ export function Invoices() {
               type="button"
               onClick={() => handlePresetChange('this_month')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'this_month'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -224,7 +225,7 @@ export function Invoices() {
               type="button"
               onClick={() => handlePresetChange('last_month')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'last_month'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -236,7 +237,7 @@ export function Invoices() {
               type="button"
               onClick={() => handlePresetChange('custom')}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0',
                 datePreset === 'custom'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                   : 'bg-[rgb(var(--muted))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -244,6 +245,7 @@ export function Invoices() {
             >
               Tùy chọn ngày
             </button>
+            </div>
           </div>
 
           {/* Custom Date Pickers */}
@@ -318,7 +320,7 @@ export function Invoices() {
         </div>
       ) : (
         <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[11px] font-semibold text-[rgb(var(--muted-foreground))] uppercase tracking-wider">
                 <tr>
@@ -412,6 +414,84 @@ export function Invoices() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+            {invoices.map((inv) => {
+              const isDebt = inv.remainingAmount > 0;
+              return (
+                <div
+                  key={inv._id}
+                  onClick={() => navigate(`/invoices/${inv._id}`)}
+                  className="p-4 active:bg-[rgb(var(--accent))] cursor-pointer transition-smooth"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold font-mono text-blue-500 text-sm">{inv.invoiceCode}</p>
+                      {inv.quoteCode && (
+                        <p className="text-[10px] text-[rgb(var(--muted-foreground))]">Từ: {inv.quoteCode}</p>
+                      )}
+                      <p className="text-xs text-[rgb(var(--muted-foreground))] mt-0.5">{formatDate(inv.createdDate)}</p>
+                    </div>
+                    <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border flex-shrink-0', invoiceStatusColors[inv.status] || '')}>
+                      {inv.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="font-semibold text-sm">{inv.customer.name}</p>
+                    <p className="text-xs text-[rgb(var(--muted-foreground))]">{inv.items.length} SP</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng Tiền</p>
+                      <p className="text-xs font-bold">{formatCurrency(inv.grandTotal)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Thu</p>
+                      <p className="text-xs font-bold text-emerald-500">{formatCurrency(inv.totalPaid)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                      <p className={cn('text-xs font-bold', isDebt ? 'text-amber-500' : 'text-[rgb(var(--muted-foreground))]')}>
+                        {formatCurrency(inv.remainingAmount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-[rgb(var(--border))]" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const apiUrl = import.meta.env.VITE_API_URL || '/api';
+                        window.open(`${apiUrl}/pdf/invoices/${inv._id}/html`, '_blank');
+                      }}
+                      className="p-2 rounded-lg hover:bg-blue-500/10 text-blue-500"
+                      title="In hóa đơn trực tiếp"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => navigate(`/invoices/${inv._id}`)}
+                      className="p-2 rounded-lg hover:bg-[rgb(var(--accent))] text-blue-500"
+                      title="Xem chi tiết"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    {inv.status !== InvoiceStatus.CANCELLED && (
+                      <button
+                        onClick={(e) => handleCancelInvoice(inv._id, e)}
+                        className="p-2 rounded-lg hover:bg-red-500/10 text-red-500"
+                        title="Hủy hóa đơn"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

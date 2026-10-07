@@ -101,14 +101,14 @@ export function CustomerDetail() {
       {/* HubSpot/Stripe Style Profile Header */}
       <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-6 shadow-sm space-y-6">
         <div className="flex items-start justify-between flex-wrap gap-4 border-b border-[rgb(var(--border))] pb-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 min-w-0">
             <img
               src={avatar}
               alt=""
-              className="w-16 h-16 rounded-full object-cover border-2 border-blue-500/30 shadow-md"
+              className="w-16 h-16 rounded-full object-cover border-2 border-blue-500/30 shadow-md flex-shrink-0"
             />
-            <div>
-              <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-[rgb(var(--foreground))]">{customer.name}</h1>
                 <span className={cn('px-3 py-1 rounded-xl text-xs font-bold border', customerTypeColors[customer.customerType])}>
                   {customer.customerType}
@@ -268,7 +268,28 @@ export function CustomerDetail() {
             {quotes.length === 0 ? (
               <p className="text-sm text-[rgb(var(--muted-foreground))] text-center py-12">Khách hàng chưa có báo giá nào</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="md:hidden space-y-2">
+                {quotes.map((q) => (
+                  <div
+                    key={q._id}
+                    onClick={() => navigate(`/quotes/${q._id}`)}
+                    className="p-3.5 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--muted))]/20 active:bg-[rgb(var(--accent))] cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-mono font-bold text-blue-500 text-sm">{q.quoteCode}</p>
+                        <p className="text-xs text-[rgb(var(--muted-foreground))]">{formatDate(q.createdDate)} • {q.items.length} SP</p>
+                      </div>
+                      <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold border flex-shrink-0', quoteStatusColors[q.status])}>
+                        {q.status}
+                      </span>
+                    </div>
+                    <p className="font-bold text-sm text-right mt-2">{formatCurrency(q.grandTotal)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[11px] font-semibold text-[rgb(var(--muted-foreground))] uppercase">
                     <tr>
@@ -302,6 +323,7 @@ export function CustomerDetail() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}
@@ -313,7 +335,41 @@ export function CustomerDetail() {
             {invoices.length === 0 ? (
               <p className="text-sm text-[rgb(var(--muted-foreground))] text-center py-12">Khách hàng chưa có hóa đơn bán hàng nào</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="md:hidden space-y-2">
+                {invoices.map((inv) => (
+                  <div
+                    key={inv._id}
+                    onClick={() => navigate(`/invoices/${inv._id}`)}
+                    className="p-3.5 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--muted))]/20 active:bg-[rgb(var(--accent))] cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-mono font-bold text-blue-500 text-sm">{inv.invoiceCode}</p>
+                        <p className="text-xs text-[rgb(var(--muted-foreground))]">{formatDate(inv.createdDate)}</p>
+                      </div>
+                      <span className={cn('px-2 py-0.5 rounded text-[10px] font-semibold border flex-shrink-0', invoiceStatusColors[inv.status])}>
+                        {inv.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                      <div>
+                        <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng</p>
+                        <p className="font-bold">{formatCurrency(inv.grandTotal)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Trả</p>
+                        <p className="font-bold text-emerald-500">{formatCurrency(inv.totalPaid)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                        <p className="font-bold text-amber-500">{formatCurrency(inv.remainingAmount)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[11px] font-semibold text-[rgb(var(--muted-foreground))] uppercase">
                     <tr>
@@ -349,6 +405,7 @@ export function CustomerDetail() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}

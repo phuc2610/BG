@@ -56,7 +56,7 @@ export function Debts() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Quản Lý Công Nợ Phải Thu</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
@@ -188,7 +188,7 @@ export function Debts() {
         </div>
       ) : (
         <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[11px] font-semibold text-[rgb(var(--muted-foreground))] uppercase tracking-wider">
                 <tr>
@@ -282,6 +282,78 @@ export function Debts() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+            {debts.map((d) => {
+              const badgeInfo = debtBadgeColors[d.debtStatus] || debtBadgeColors.UNPAID;
+              const isDebt = d.remainingAmount > 0;
+              return (
+                <div
+                  key={d._id}
+                  onClick={() => navigate(`/invoices/${d.invoiceId}`)}
+                  className="p-4 active:bg-[rgb(var(--accent))] cursor-pointer transition-smooth"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold font-mono text-blue-500 text-sm">{d.invoiceCode}</p>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))]">{formatDate(d.createdDate)}</p>
+                      <p className="font-bold text-sm mt-1">{d.customer.name}</p>
+                      <p className="text-xs text-[rgb(var(--muted-foreground))]">{d.customer.phone || '---'}</p>
+                    </div>
+                    <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border flex-shrink-0', badgeInfo.className)}>
+                      {badgeInfo.label}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng Tiền</p>
+                      <p className="text-xs font-bold">{formatCurrency(d.grandTotal)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Thu</p>
+                      <p className="text-xs font-bold text-emerald-500">{formatCurrency(d.totalPaid)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                      <p className={cn('text-xs font-bold', isDebt ? 'text-amber-500' : 'text-[rgb(var(--muted-foreground))]')}>
+                        {formatCurrency(d.remainingAmount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-[rgb(var(--border))]">
+                    <div className="text-xs">
+                      <span className="text-[rgb(var(--muted-foreground))]">Hạn: </span>
+                      <span className="font-semibold">{formatDate(d.dueDate)}</span>
+                      {d.overdueDays > 0 ? (
+                        <span className="ml-1.5 text-red-500 font-bold">🔴 Quá {d.overdueDays} ngày</span>
+                      ) : d.debtStatus !== 'PAID' && d.remainingDays <= 3 ? (
+                        <span className="ml-1.5 text-amber-500 font-bold">🟡 Còn {d.remainingDays} ngày</span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {isDebt && (
+                        <button
+                          onClick={() => setPayingDebt(d)}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold hover:opacity-90 transition-smooth shadow-md shadow-emerald-500/20"
+                        >
+                          Thu Nợ
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate(`/invoices/${d.invoiceId}`)}
+                        className="p-2 rounded-lg hover:bg-[rgb(var(--accent))] text-blue-500"
+                        title="Xem hóa đơn chi tiết"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

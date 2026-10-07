@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ProductRepository } from '../repositories';
 import { generateProductId, generateProductCode, IProductDocument } from '../models';
 import { ProductCategory, ProductFilterQuery } from '../types';
@@ -54,13 +55,23 @@ export class ProductService {
     const productCode = await generateProductCode(data.category);
     const barcode = `NPC${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-    const initialImages = data.images || [];
+    let initialImages = data.images || [];
     if (data.imageUrl && initialImages.length === 0) {
       initialImages.push({
         url: data.imageUrl,
         publicId: data.imagePublicId || `img_${Date.now()}`,
         isThumbnail: true,
         order: 0,
+      });
+    }
+
+    if (Array.isArray(initialImages)) {
+      initialImages = initialImages.map((img: any) => {
+        const item = { ...img };
+        if (item._id && !mongoose.Types.ObjectId.isValid(String(item._id))) {
+          delete item._id;
+        }
+        return item;
       });
     }
 
@@ -80,8 +91,24 @@ export class ProductService {
     return product;
   }
 
-  async update(id: string, data: Partial<IProductDocument>) {
-    const product = await productRepo.updateById(id, data);
+  async update(id: string, data: any) {
+    const updateData = { ...data };
+
+    if (updateData.images && Array.isArray(updateData.images)) {
+      updateData.images = updateData.images.map((img: any) => {
+        const item = { ...img };
+        if (item._id && !mongoose.Types.ObjectId.isValid(String(item._id))) {
+          delete item._id;
+        }
+        return item;
+      });
+    }
+
+    if (updateData.model && !updateData.modelName) {
+      updateData.modelName = updateData.model;
+    }
+
+    const product = await productRepo.updateById(id, updateData);
     if (!product) throw new AppError('Sản phẩm không tồn tại', 404);
     return product;
   }

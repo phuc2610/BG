@@ -6,22 +6,23 @@ export const createProductSchema = z.object({
   category: z.nativeEnum(ProductCategory, { errorMap: () => ({ message: 'Danh mục không hợp lệ' }) }),
   brand: z.string().min(1, 'Thương hiệu là bắt buộc').max(100),
   model: z.string().min(1, 'Model là bắt buộc').max(100),
-  description: z.string().max(5000).optional(),
-  specs: z.object({
-    cpu: z.string().optional(),
-    mainboard: z.string().optional(),
-    ram: z.string().optional(),
-    ssd: z.string().optional(),
-    hdd: z.string().optional(),
-    vga: z.string().optional(),
-    psu: z.string().optional(),
-    case: z.string().optional(),
-    cooler: z.string().optional(),
-    windows: z.string().optional(),
-    office: z.string().optional(),
-    accessories: z.string().optional(),
-    notes: z.string().optional(),
-  }).optional(),
+  description: z.string().max(5000).nullish().or(z.literal('')),
+  imageUrl: z.string().nullish().or(z.literal('')),
+  imagePublicId: z.string().nullish().or(z.literal('')),
+  images: z.array(z.any()).optional(),
+  specs: z
+    .record(z.any())
+    .nullish()
+    .transform((val) => {
+      if (!val) return {};
+      const cleaned: Record<string, string> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== null && v !== undefined && String(v).trim()) {
+          cleaned[k] = String(v).trim();
+        }
+      }
+      return cleaned;
+    }),
 });
 
 export const createInventoryLotSchema = z.object({

@@ -87,24 +87,32 @@ body {
 }
 
 /* ===== Animations ===== */
+/* NOTE: these animate opacity only (no `transform`). An `animation-fill-mode:
+   forwards` animation that ever touches `transform` keeps that element
+   registered as a CSS containing block for `position: fixed` descendants
+   even after it settles back to an identity matrix — Chromium keeps the
+   filled effect "live" on the property. That silently breaks any
+   fixed-position modal nested under a page wrapper using these classes
+   (e.g. `animate-fade-in` on the standard page container), so the transform
+   step was dropped rather than just resolved to `none`. */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-16px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideInUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes shimmer {

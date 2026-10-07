@@ -81,7 +81,7 @@ export function Quotes() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Báo giá</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">{totalQuotes} báo giá</p>
@@ -169,67 +169,69 @@ export function Quotes() {
               style={{ animationDelay: `${i * 0.03}s`, opacity: 0 }}
               onClick={() => navigate(`/quotes/${quote._id}`)}
             >
-              <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
                     <FileText className="w-5 h-5 text-blue-500" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold">{quote.quoteCode}</p>
-                    <p className="text-xs text-[rgb(var(--muted-foreground))]">
+                    <p className="text-xs text-[rgb(var(--muted-foreground))] truncate">
                       {quote.customer.name} {quote.customer.phone ? `• ${quote.customer.phone}` : ''}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex-1" />
+                <div className="hidden sm:block flex-1" />
 
-                <p className="text-xs text-[rgb(var(--muted-foreground))]">
-                  {formatDate(quote.createdDate)} • {quote.items.length} sản phẩm
-                </p>
+                <div className="flex items-center flex-wrap gap-2 sm:gap-3 sm:justify-end">
+                  <p className="text-xs text-[rgb(var(--muted-foreground))] w-full sm:w-auto">
+                    {formatDate(quote.createdDate)} • {quote.items.length} sản phẩm
+                  </p>
 
-                <div className={cn('px-2.5 py-1 rounded-lg text-xs font-medium border', quoteStatusColors[quote.status] || '')}>
-                  {quote.status}
-                </div>
+                  <div className={cn('px-2.5 py-1 rounded-lg text-xs font-medium border', quoteStatusColors[quote.status] || '')}>
+                    {quote.status}
+                  </div>
 
-                {quote.invoiceCode && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                    HD: {quote.invoiceCode}
-                  </span>
-                )}
+                  {quote.invoiceCode && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                      HD: {quote.invoiceCode}
+                    </span>
+                  )}
 
-                <p className="text-sm font-bold text-blue-500 w-36 text-right">
-                  {formatCurrency(quote.grandTotal)}
-                </p>
+                  <p className="text-sm font-bold text-blue-500 text-right ml-auto sm:ml-0 sm:w-36">
+                    {formatCurrency(quote.grandTotal)}
+                  </p>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => handlePrintQuote(quote._id)}
-                    className="p-2 rounded-lg hover:bg-blue-500/10 transition-smooth text-blue-500"
-                    title="In Báo Giá Trực Tiếp"
-                  >
-                    <Printer className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDownloadPdf(quote._id, quote.quoteCode)}
-                    disabled={downloading === quote._id}
-                    className="p-2 rounded-lg hover:bg-[rgb(var(--accent))] transition-smooth"
-                    title="Tải PDF"
-                  >
-                    {downloading === quote._id ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                    ) : (
-                      <Download className="w-4 h-4 text-[rgb(var(--muted-foreground))]" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(quote._id)}
-                    className="p-2 rounded-lg hover:bg-red-500/10 transition-smooth"
-                    title="Xóa"
-                  >
-                    <Trash2 className="w-4 h-4 text-[rgb(var(--muted-foreground))] hover:text-red-500" />
-                  </button>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handlePrintQuote(quote._id)}
+                      className="p-2.5 rounded-lg hover:bg-blue-500/10 transition-smooth text-blue-500"
+                      title="In Báo Giá Trực Tiếp"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPdf(quote._id, quote.quoteCode)}
+                      disabled={downloading === quote._id}
+                      className="p-2.5 rounded-lg hover:bg-[rgb(var(--accent))] transition-smooth"
+                      title="Tải PDF"
+                    >
+                      {downloading === quote._id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      ) : (
+                        <Download className="w-4 h-4 text-[rgb(var(--muted-foreground))]" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(quote._id)}
+                      className="p-2.5 rounded-lg hover:bg-red-500/10 transition-smooth"
+                      title="Xóa"
+                    >
+                      <Trash2 className="w-4 h-4 text-[rgb(var(--muted-foreground))] hover:text-red-500" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

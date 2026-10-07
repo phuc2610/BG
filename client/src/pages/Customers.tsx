@@ -196,7 +196,7 @@ export function Customers() {
           <p className="text-sm mt-1">Bấm <strong>"Thêm Khách Hàng Mới"</strong> hoặc tự động lưu khi tạo Báo giá / Hóa đơn.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] overflow-hidden shadow-sm">
+        <div className="hidden md:block rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))]/50 border-b border-[rgb(var(--border))] text-[11px] font-semibold text-[rgb(var(--muted-foreground))] uppercase tracking-wider">
@@ -290,6 +290,84 @@ export function Customers() {
         </div>
       )}
 
+      {/* Mobile Card List */}
+      {customers.length > 0 && (
+        <div className="md:hidden space-y-3">
+          {customers.map((c) => {
+            const avatar = c.avatarUrl || getInitialsAvatarUrl(c.name);
+            const isDebt = (c.totalDebt || 0) > 0;
+            return (
+              <div
+                key={c._id}
+                onClick={() => navigate(`/customers/${c._id}`)}
+                className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-4 shadow-sm active:bg-[rgb(var(--accent))] transition-smooth cursor-pointer"
+              >
+                <div className="flex items-start gap-3">
+                  <img src={avatar} alt="" className="w-11 h-11 rounded-full object-cover border border-[rgb(var(--border))] flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-sm truncate">{c.name}</p>
+                      <span className={cn('px-2 py-0.5 rounded-lg text-[10px] border flex-shrink-0', customerTypeColors[c.customerType] || '')}>
+                        {c.customerType}
+                      </span>
+                    </div>
+                    {c.companyName && (
+                      <p className="text-xs text-[rgb(var(--muted-foreground))] font-medium truncate">{c.companyName}</p>
+                    )}
+                    <p className="text-[11px] font-mono text-blue-500 font-bold mt-0.5">{c.customerCode}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs mt-3 pt-3 border-t border-[rgb(var(--border))]">
+                  <span className="text-[rgb(var(--muted-foreground))]">{c.phone || '---'}</span>
+                  <span className="text-[rgb(var(--muted-foreground))]">{c.totalOrders || 0} đơn</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="rounded-xl bg-[rgb(var(--muted))]/40 px-3 py-2">
+                    <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Doanh thu</p>
+                    <p className="text-sm font-bold text-blue-500">{formatCurrency(c.totalRevenue || 0)}</p>
+                  </div>
+                  <div className="rounded-xl bg-[rgb(var(--muted))]/40 px-3 py-2">
+                    <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Công nợ</p>
+                    <p className={cn('text-sm font-bold', isDebt ? 'text-amber-500' : 'text-[rgb(var(--muted-foreground))]')}>
+                      {formatCurrency(c.totalDebt || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-[rgb(var(--border))]" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => navigate(`/customers/${c._id}`)}
+                    className="p-2 rounded-lg hover:bg-[rgb(var(--accent))] text-blue-500"
+                    title="Xem chi tiết hồ sơ CRM"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingCustomer(c);
+                      setShowAddModal(true);
+                    }}
+                    className="p-2 rounded-lg hover:bg-[rgb(var(--accent))] text-[rgb(var(--muted-foreground))]"
+                    title="Chỉnh sửa"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(c._id, e)}
+                    className="p-2 rounded-lg hover:bg-red-500/10 text-red-500"
+                    title="Xóa khách hàng"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 border-t border-[rgb(var(--border))]">
@@ -353,6 +431,13 @@ function CustomerModal({
   const [notes, setNotes] = useState(customer?.notes || '');
   const [customerType, setCustomerType] = useState<CustomerType>(customer?.customerType || CustomerType.RETAIL);
   const [saving, setSaving] = useState(false);
+  const [showMore, setShowMore] = useState(
+    Boolean(
+      customer?.companyName || customer?.contactPerson || customer?.secondaryPhone ||
+      customer?.email || customer?.taxCode || customer?.facebook || customer?.zalo ||
+      customer?.address || customer?.notes
+    )
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -420,7 +505,8 @@ function CustomerModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden flex-1 min-h-0">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold mb-1 block">Tên Khách Hàng / Họ Tên *</label>
@@ -447,29 +533,7 @@ function CustomerModal({
               </select>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Tên Công Ty (Nếu có)</label>
-              <input
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                className={inputClass}
-                placeholder="VD: Công ty TNHH Máy Tính NP"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Người Liên Hệ Chính</label>
-              <input
-                type="text"
-                value={contactPerson}
-                onChange={(e) => setContactPerson(e.target.value)}
-                className={inputClass}
-                placeholder="VD: Anh Nam (Trưởng phòng IT)"
-              />
-            </div>
-
-            <div>
+            <div className="md:col-span-2">
               <label className="text-xs font-semibold mb-1 block">Số Điện Thoại Chính *</label>
               <input
                 type="text"
@@ -479,86 +543,125 @@ function CustomerModal({
                 placeholder="VD: 0901.234.567"
               />
             </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Số Điện Thoại Phụ</label>
-              <input
-                type="text"
-                value={secondaryPhone}
-                onChange={(e) => setSecondaryPhone(e.target.value)}
-                className={inputClass}
-                placeholder="VD: 0988.765.432"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={inputClass}
-                placeholder="VD: nam@company.com"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Mã Số Thuế</label>
-              <input
-                type="text"
-                value={taxCode}
-                onChange={(e) => setTaxCode(e.target.value)}
-                className={inputClass}
-                placeholder="VD: 0101234567"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Link Facebook</label>
-              <input
-                type="text"
-                value={facebook}
-                onChange={(e) => setFacebook(e.target.value)}
-                className={inputClass}
-                placeholder="VD: facebook.com/nam.computer"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold mb-1 block">Số Zalo</label>
-              <input
-                type="text"
-                value={zalo}
-                onChange={(e) => setZalo(e.target.value)}
-                className={inputClass}
-                placeholder="VD: 0901234567"
-              />
-            </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold mb-1 block">Địa Chỉ Giao Hàng / Trụ Sở</label>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className={inputClass}
-              placeholder="VD: 123 Đường Lê Thanh Nghị, Hai Bà Trưng, Hà Nội"
-            />
-          </div>
+          {!showMore && (
+            <button
+              type="button"
+              onClick={() => setShowMore(true)}
+              className="text-xs font-semibold text-blue-500 hover:underline"
+            >
+              + Thêm thông tin công ty / liên hệ khác (không bắt buộc)
+            </button>
+          )}
 
-          <div>
-            <label className="text-xs font-semibold mb-1 block">Ghi Chú Nội Bộ</label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className={inputClass}
-              placeholder="Ghi chú sở thích, lưu ý giao nhận..."
-            />
-          </div>
+          {showMore && (
+            <div className="space-y-4 pt-1 border-t border-[rgb(var(--border))] mt-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Tên Công Ty (Nếu có)</label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: Công ty TNHH Máy Tính NP"
+                  />
+                </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[rgb(var(--border))]">
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Người Liên Hệ Chính</label>
+                  <input
+                    type="text"
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: Anh Nam (Trưởng phòng IT)"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Số Điện Thoại Phụ</label>
+                  <input
+                    type="text"
+                    value={secondaryPhone}
+                    onChange={(e) => setSecondaryPhone(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: 0988.765.432"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: nam@company.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Mã Số Thuế</label>
+                  <input
+                    type="text"
+                    value={taxCode}
+                    onChange={(e) => setTaxCode(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: 0101234567"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Link Facebook</label>
+                  <input
+                    type="text"
+                    value={facebook}
+                    onChange={(e) => setFacebook(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: facebook.com/nam.computer"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1 block">Số Zalo</label>
+                  <input
+                    type="text"
+                    value={zalo}
+                    onChange={(e) => setZalo(e.target.value)}
+                    className={inputClass}
+                    placeholder="VD: 0901234567"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold mb-1 block">Địa Chỉ Giao Hàng / Trụ Sở</label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className={inputClass}
+                  placeholder="VD: 123 Đường Lê Thanh Nghị, Hai Bà Trưng, Hà Nội"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold mb-1 block">Ghi Chú Nội Bộ</label>
+                <textarea
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className={inputClass}
+                  placeholder="Ghi chú sở thích, lưu ý giao nhận..."
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgb(var(--border))] flex-shrink-0">
             <button
               type="button"
               onClick={onClose}

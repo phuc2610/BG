@@ -17,6 +17,7 @@ import { SupplierDetail } from '@/pages/SupplierDetail';
 import { Purchases } from '@/pages/Purchases';
 import { PurchaseForm } from '@/pages/PurchaseForm';
 import { SupplierWarranty } from '@/pages/SupplierWarranty';
+import { WarrantyLookup } from '@/pages/WarrantyLookup';
 import { Debts } from '@/pages/Debts';
 import { Settings } from '@/pages/Settings';
 import { Register } from '@/pages/Register';
@@ -129,6 +130,7 @@ export default function App() {
             <Route path="products/:id" element={<PermissionGuard permissionKey="product.edit"><ProductForm /></PermissionGuard>} />
             <Route path="inventory" element={<PermissionGuard permissionKey="inventory.view"><Inventory /></PermissionGuard>} />
             <Route path="supplier-warranties" element={<PermissionGuard permissionKey="warranty.supplier.view"><SupplierWarranty /></PermissionGuard>} />
+            <Route path="warranty-lookup" element={<PermissionGuard permissionKey="warranty.supplier.view"><WarrantyLookup /></PermissionGuard>} />
             <Route path="quotes" element={<PermissionGuard permissionKey="quote.view"><Quotes /></PermissionGuard>} />
             <Route path="quotes/new" element={<PermissionGuard permissionKey="quote.create"><QuoteForm /></PermissionGuard>} />
             <Route path="quotes/:id" element={<PermissionGuard permissionKey="quote.view"><QuoteForm /></PermissionGuard>} />

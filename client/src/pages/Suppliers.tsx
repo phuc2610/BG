@@ -31,6 +31,7 @@ export function Suppliers() {
 
   // Modal create supplier
   const [showModal, setShowModal] = useState(false);
+  const [showMoreSupplier, setShowMoreSupplier] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     companyName: '',
@@ -83,6 +84,7 @@ export function Suppliers() {
       if (res.data.success) {
         toast.success(`Đã thêm nhà cung cấp: ${res.data.data.name}`);
         setShowModal(false);
+        setShowMoreSupplier(false);
         setFormData({
           name: '',
           companyName: '',
@@ -219,7 +221,8 @@ export function Suppliers() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                 <tr>
@@ -294,14 +297,81 @@ export function Suppliers() {
               </tbody>
             </table>
           </div>
+
+          <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+            {suppliers.map((s) => (
+              <div
+                key={s._id}
+                onClick={() => navigate(`/suppliers/${s._id}`)}
+                className="p-4 active:bg-[rgb(var(--accent))/50] cursor-pointer transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate">{s.name}</p>
+                    {s.companyName && (
+                      <p className="text-xs text-[rgb(var(--muted-foreground))] truncate">{s.companyName}</p>
+                    )}
+                    <p className="font-mono font-semibold text-blue-500 text-xs mt-0.5">{s.supplierCode}</p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/suppliers/${s._id}`);
+                    }}
+                    className="p-2 rounded-xl hover:bg-blue-500/10 text-blue-500 transition-colors flex-shrink-0"
+                    title="Xem chi tiết"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {(s.phone || s.email) && (
+                  <div className="flex items-center gap-3 mt-2 text-xs text-[rgb(var(--muted-foreground))]">
+                    {s.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3.5 h-3.5 text-blue-500" />
+                        {s.phone}
+                      </span>
+                    )}
+                    {s.email && (
+                      <span className="flex items-center gap-1 truncate">
+                        <Mail className="w-3.5 h-3.5" />
+                        {s.email}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div>
+                    <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng Nhập</p>
+                    <p className="text-xs font-medium">{formatCurrency(s.totalPurchased || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Trả</p>
+                    <p className="text-xs font-medium text-emerald-500">{formatCurrency(s.totalPaid || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                    {(s.totalDebt || 0) > 0 ? (
+                      <p className="text-xs font-semibold text-amber-500">{formatCurrency(s.totalDebt)}</p>
+                    ) : (
+                      <p className="text-xs text-[rgb(var(--muted-foreground))]">0 ₫</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
       {/* Modal Add Supplier */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-fade-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/30]">
+          <div className="bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-2xl w-full max-w-xl shadow-2xl animate-fade-in flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))/30] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-blue-500" />
                 <h3 className="font-bold text-base text-[rgb(var(--foreground))]">
@@ -316,7 +386,8 @@ export function Suppliers() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSupplier} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleCreateSupplier} className="flex flex-col overflow-hidden flex-1 min-h-0">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
@@ -332,20 +403,7 @@ export function Suppliers() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Tên Công Ty (Nếu có)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Công ty TNHH..."
-                    value={formData.companyName}
-                    onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
                     Số Điện Thoại
                   </label>
@@ -357,87 +415,115 @@ export function Suppliers() {
                     className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="sales@supplier.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Mã Số Thuế
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="0101234567"
-                    value={formData.taxCode}
-                    onChange={(e) => setFormData({ ...formData, taxCode: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Số Tài Khoản
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1903..."
-                    value={formData.accountNumber}
-                    onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Ngân Hàng
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="MB Bank, Vietcombank..."
-                    value={formData.bankName}
-                    onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Địa Chỉ
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Địa chỉ nhà cung cấp..."
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
-                    Ghi Chú
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Ghi chú thêm về điều khoản bảo hành, chiết khấu..."
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
-                  />
-                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[rgb(var(--border))]">
+              {!showMoreSupplier && (
+                <button
+                  type="button"
+                  onClick={() => setShowMoreSupplier(true)}
+                  className="text-xs font-semibold text-blue-500 hover:underline"
+                >
+                  + Thêm thông tin công ty / ngân hàng khác (không bắt buộc)
+                </button>
+              )}
+
+              {showMoreSupplier && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[rgb(var(--border))]">
+                  <div>
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Tên Công Ty (Nếu có)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Công ty TNHH..."
+                      value={formData.companyName}
+                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="sales@supplier.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Mã Số Thuế
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="0101234567"
+                      value={formData.taxCode}
+                      onChange={(e) => setFormData({ ...formData, taxCode: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Số Tài Khoản
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="1903..."
+                      value={formData.accountNumber}
+                      onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Ngân Hàng
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MB Bank, Vietcombank..."
+                      value={formData.bankName}
+                      onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Địa Chỉ
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Địa chỉ nhà cung cấp..."
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-[rgb(var(--foreground))] mb-1">
+                      Ghi Chú
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Ghi chú thêm về điều khoản bảo hành, chiết khấu..."
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-sm bg-[rgb(var(--background))] border border-[rgb(var(--border))] text-[rgb(var(--foreground))]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgb(var(--border))] flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

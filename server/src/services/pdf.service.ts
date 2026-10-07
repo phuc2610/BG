@@ -14,7 +14,7 @@ export class PdfService {
 
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     });
 
     try {
@@ -39,7 +39,7 @@ export class PdfService {
 
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     });
 
     try {
@@ -1239,7 +1239,6 @@ export class PdfService {
     const itemsHtml = quote.items
       .sort((a, b) => a.order - b.order)
       .map((item, index) => {
-        const specsText = this.buildCompactSpecs(item.productSnapshot.specs);
         const itemDiscountValue = item.discountType === 'percent'
           ? (item.unitPrice * item.quantity * item.discount) / 100
           : item.discount;
@@ -1270,7 +1269,6 @@ export class PdfService {
               ${brandName ? `<div>Hãng: <span style="font-weight: 600; color: #0755D9;">${brandName}</span></div>` : ''}
               ${item.warranty ? `<div>Bảo hành: <span>${item.warranty}</span></div>` : ''}
               ${serialText ? `<div>Serial: <span>${serialText}</span></div>` : ''}
-              ${specsText ? `<div style="color: #64748b; font-size: 8.5px; margin-top: 1px;">${specsText}</div>` : ''}
             </div>
           </td>
           <td class="td-price">${this.formatCurrency(item.unitPrice)}</td>
@@ -1477,7 +1475,6 @@ export class PdfService {
     const itemsHtml = invoice.items
       .sort((a, b) => a.order - b.order)
       .map((item, index) => {
-        const specsText = this.buildCompactSpecs(item.productSnapshot.specs);
         const itemDiscountValue = item.discountType === 'percent'
           ? (item.unitPrice * item.quantity * item.discount) / 100
           : item.discount;
@@ -1511,7 +1508,6 @@ export class PdfService {
               ${brandName ? `<div>Hãng: <span style="font-weight: 600; color: #0755D9;">${brandName}</span></div>` : ''}
               ${item.warranty ? `<div>Bảo hành: <span>${item.warranty}</span></div>` : ''}
               ${serialsList ? `<div>Serial: <span>${serialsList}</span></div>` : ''}
-              ${specsText ? `<div style="color: #64748b; font-size: 8.5px; margin-top: 1px;">${specsText}</div>` : ''}
             </div>
           </td>
           <td class="td-price">${this.formatCurrency(item.unitPrice)}</td>

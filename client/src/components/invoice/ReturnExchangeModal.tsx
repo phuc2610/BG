@@ -338,30 +338,32 @@ export function ReturnExchangeModal({ invoice, onClose, onSuccess }: ReturnExcha
         </div>
 
         {/* Action Tabs */}
-        <div className="flex border-b border-[rgb(var(--border))] bg-[rgb(var(--background))] px-6 pt-3 flex-shrink-0 gap-3">
+        <div className="flex overflow-x-auto border-b border-[rgb(var(--border))] bg-[rgb(var(--background))] px-3 sm:px-6 pt-3 flex-shrink-0 gap-2 sm:gap-3">
           <button
             onClick={() => setActiveTab('RETURN')}
             className={cn(
-              'flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-bold border-b-2 transition-all',
+              'flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-t-xl text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap flex-shrink-0',
               activeTab === 'RETURN'
                 ? 'border-blue-500 text-blue-500 bg-[rgb(var(--card))] shadow-sm'
                 : 'border-transparent text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
             )}
           >
-            <RotateCcw className="w-4 h-4" />
-            1. KHÁCH TRẢ HÀNG (HOÀN TIỀN / GIẢM NỢ)
+            <RotateCcw className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">1. KHÁCH TRẢ HÀNG (HOÀN TIỀN / GIẢM NỢ)</span>
+            <span className="sm:hidden">1. Trả Hàng</span>
           </button>
           <button
             onClick={() => setActiveTab('EXCHANGE')}
             className={cn(
-              'flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-bold border-b-2 transition-all',
+              'flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-t-xl text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap flex-shrink-0',
               activeTab === 'EXCHANGE'
                 ? 'border-purple-500 text-purple-500 bg-[rgb(var(--card))] shadow-sm'
                 : 'border-transparent text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
             )}
           >
-            <ArrowRightLeft className="w-4 h-4" />
-            2. KHÁCH ĐỔI SẢN PHẨM MỚI
+            <ArrowRightLeft className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">2. KHÁCH ĐỔI SẢN PHẨM MỚI</span>
+            <span className="sm:hidden">2. Đổi Hàng</span>
           </button>
         </div>
 

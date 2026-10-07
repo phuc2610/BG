@@ -62,7 +62,7 @@ export const WARRANTY_OPTIONS = [
 // ============================================
 
 export interface ProductImage {
-  _id: string;
+  _id?: string;
   url: string;
   publicId: string;
   order: number;
@@ -374,6 +374,7 @@ export interface InvoiceStats {
   totalPaid: number;
   totalReceivables: number;
   totalInvoices: number;
+  totalProfit: number;
   averageInvoiceValue: number;
 }
 

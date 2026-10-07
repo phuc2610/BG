@@ -12,6 +12,7 @@ export class ProductController {
     const search = req.query.search as string;
     const category = req.query.category as any;
     const brand = req.query.brand as string;
+    const noImage = req.query.noImage === 'true';
 
     const result = await productService.getAll({
       page,
@@ -19,6 +20,7 @@ export class ProductController {
       search,
       category,
       brand,
+      noImage,
     } as any);
 
     res.json({ success: true, ...result });

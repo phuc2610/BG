@@ -9,7 +9,8 @@
     "start": "node dist/app.js",
     "seed": "tsx src/utils/seed.ts",
     "clear": "tsx src/utils/clear.ts",
-    "reset-business-data": "npx tsx scripts/reset-business-data.ts"
+    "reset-business-data": "npx tsx scripts/reset-business-data.ts",
+    "fix-returned-units": "npx tsx scripts/fix-returned-units.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -39,6 +40,7 @@
     "@types/multer": "^1.4.12",
     "@types/qrcode": "^1.5.5",
     "@types/ssh2": "^1.15.5",
+    "playwright": "^1.63.0",
     "ssh2": "^1.17.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"

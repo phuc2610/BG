@@ -25,8 +25,8 @@ conn.on('ready', () => {
     });
   });
 }).connect({
-  host: '163.227.231.43',
+  host: '160.191.86.107',
   port: 22,
   username: 'root',
-  password: 'Phuc2610@',
+  password: 'Khongbiet184@',
 });

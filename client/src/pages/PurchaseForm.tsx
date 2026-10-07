@@ -27,6 +27,7 @@ import {
   Square,
   AlertTriangle,
   Wand2,
+  ScanLine,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { ProductCondition, ProductCategory } from '@/types';
@@ -38,6 +39,7 @@ import { PurchaseItemRow, type PurchaseItemData } from '@/components/purchase/Pu
 import { PurchaseExcelPasteModal } from '@/components/purchase/PurchaseExcelPasteModal';
 import { PurchaseBatchWarrantyModal } from '@/components/purchase/PurchaseBatchWarrantyModal';
 import { PurchaseBulkSerialModal } from '@/components/purchase/PurchaseBulkSerialModal';
+import { WarrantyLookupModal } from '@/components/warranty/WarrantyLookupModal';
 
 const NP_PURCHASE_DRAFT_KEY = 'np_purchase_draft_form_v1';
 
@@ -87,6 +89,9 @@ export function PurchaseForm() {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showBatchWarrantyModal, setShowBatchWarrantyModal] = useState(false);
   const [showBulkSerialModal, setShowBulkSerialModal] = useState(false);
+  const [showWarrantyModal, setShowWarrantyModal] = useState(false);
+  const [warrantyModalSerial, setWarrantyModalSerial] = useState<string | undefined>(undefined);
+  const [warrantyModalBrand, setWarrantyModalBrand] = useState<string | undefined>(undefined);
 
   // Inline Quick Add Supplier Modal State
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -973,6 +978,20 @@ export function PurchaseForm() {
                 <button
                   type="button"
                   onClick={() => {
+                    setWarrantyModalSerial('');
+                    setWarrantyModalBrand('');
+                    setShowWarrantyModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20 flex items-center gap-1.5 transition-colors shadow-sm"
+                  title="Quét tem nhãn OCR hoặc tra cứu bảo hành nhà cung cấp"
+                >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  <span>Tra Cứu BH (OCR)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
                     setTargetItemIndex(items.length - 1);
                     setShowProductModal(true);
                   }}
@@ -1667,6 +1686,31 @@ export function PurchaseForm() {
         onApply={(updated) => {
           setItems(updated);
           toast.success('✨ Đã sinh và cập nhật Serial hàng loạt thành công!');
+        }}
+      />
+
+      {/* Warranty Lookup / OCR Modal */}
+      <WarrantyLookupModal
+        isOpen={showWarrantyModal}
+        onClose={() => setShowWarrantyModal(false)}
+        initialSerial={warrantyModalSerial}
+        initialBrand={warrantyModalBrand}
+        onApplyWarranty={(info) => {
+          // Auto add a new item row with extracted S/N and warranty
+          const newItem: PurchaseItemData = {
+            productId: '',
+            productName: info.supplierName ? `Linh kiện (${info.supplierName})` : 'Linh kiện mới',
+            productCode: '',
+            quantity: 1,
+            costPrice: 0,
+            listPrice: 0,
+            condition: ProductCondition.LIKE_NEW,
+            supplierWarrantyValue: info.remainingDays ? Math.max(1, Math.round(info.remainingDays / 30)) : 12,
+            supplierWarrantyUnit: 'month',
+            serialsRaw: info.serialNumber,
+          };
+          setItems((prev) => [...prev, newItem]);
+          toast.success(`✓ Đã thêm linh kiện S/N: ${info.serialNumber} vào danh sách nhập!`);
         }}
       />
     </div>

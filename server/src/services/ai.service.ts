@@ -141,20 +141,15 @@ export class AiService {
   }
 
   /**
-   * Suggests product specs, brand, model and description using Google Gemini API.
+   * Suggests product specs, brand, model and description using Google Gemini with automatic OpenAI fallback.
    */
   async suggestProductSpecs(name: string, category?: string): Promise<any> {
     if (!name || !name.trim()) {
       throw new AppError('Vui lòng nhập Tên sản phẩm để AI gợi ý thông số', 400);
     }
 
-    const geminiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      throw new AppError('Chưa cấu hình GEMINI_API_KEY trong hệ thống', 500);
-    }
-
     const prompt =
-      `Bạn là trợ lý kỹ thuật máy tính chuyên nghiệp cho cửa hàng linh kiện PC. ` +
+      `Bạn là chuyên gia kỹ thuật phần cứng máy tính cho cửa hàng linh kiện PC. ` +
       `Hãy phân tích tên linh kiện sau: "${name.trim()}" (Danh mục gợi ý: ${category || 'Linh kiện máy tính'}).\n` +
       `Trả về kết quả DUY NHẤT dưới dạng JSON hợp lệ (không chứa markdown code block, chỉ thuần JSON object) với các trường:\n` +
       `{\n` +
@@ -165,45 +160,92 @@ export class AiService {
       `    "cpu": "Xung nhịp, số nhân luồng, socket nếu là CPU",\n` +
       `    "mainboard": "Socket, chipset nếu là Mainboard",\n` +
       `    "ram": "Dung lượng, bus, chuẩn DDR nếu là RAM",\n` +
-      `    "ssd": "Dung lượng, chuẩn M.2/SATA nếu là SSD",\n` +
+      `    "ssd": "Dung lượng, chuẩn M.2/SATA, tốc độ đọc ghi nếu là SSD",\n` +
       `    "hdd": "Dung lượng, vòng quay RPM nếu là HDD",\n` +
       `    "vga": "VRAM, cổng xuất hình nếu là VGA",\n` +
       `    "psu": "Công suất Watt, chuẩn 80 Plus nếu là Nguồn",\n` +
       `    "case": "Kích thước, form factor nếu là Case",\n` +
       `    "cooler": "Loại tản nhiệt nếu là Tản",\n` +
+      `    "windows": "Phiên bản Windows nếu có",\n` +
+      `    "office": "Phiên bản Office nếu có",\n` +
+      `    "accessories": "Phụ kiện đi kèm nếu có",\n` +
       `    "notes": "Ghi chú tương thích nếu có"\n` +
       `  }\n` +
       `}`;
 
-    try {
-      const models = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
-      for (const m of models) {
-        try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-              }),
+    const sanitizeResult = (parsed: any) => {
+      if (!parsed) return parsed;
+      if (parsed.specs && typeof parsed.specs === 'object') {
+        const cleaned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed.specs)) {
+          if (v !== null && v !== undefined) {
+            if (typeof v === 'object') {
+              cleaned[k] = Object.entries(v as any)
+                .map(([subK, subV]) => `${subK}: ${subV}`)
+                .join(', ');
+            } else if (String(v).trim()) {
+              cleaned[k] = String(v).trim();
             }
-          );
+          }
+        }
+        parsed.specs = cleaned;
+      }
+      return parsed;
+    };
+
+    // Use Google Gemini exclusively
+    const geminiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!geminiKey || !geminiKey.trim()) {
+      throw new AppError('Chưa cấu hình GEMINI_API_KEY trong hệ thống', 500);
+    }
+
+    const geminiModels = [
+      'gemini-flash-lite-latest',
+      'gemini-flash-latest',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+    ];
+    let lastError: any = null;
+
+    for (const m of geminiModels) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey.trim()}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: 'application/json',
+              },
+            }),
+          }
+        );
+
+        if (res.ok) {
           const data: any = await res.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
-            const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const cleanJson = text.replace(/```json/gi, '').replace(/```/g, '').trim();
             const parsed = JSON.parse(cleanJson);
-            return parsed;
+            if (parsed && (parsed.brand || parsed.model || parsed.specs || parsed.description)) {
+              return sanitizeResult(parsed);
+            }
           }
-        } catch (e) {
-          console.warn(`Gemini model ${m} specs suggestion error:`, e);
+        } else {
+          const errBody: any = await res.json().catch(() => ({}));
+          console.warn(`Gemini model ${m} error:`, errBody);
+          lastError = errBody?.error?.message || `HTTP ${res.status}`;
         }
+      } catch (e: any) {
+        console.warn(`Gemini model ${m} fetch error:`, e);
+        lastError = e?.message || e;
       }
-      throw new AppError('Không thể lấy thông số từ Gemini', 400);
-    } catch (err: any) {
-      if (err instanceof AppError) throw err;
-      throw new AppError(`Lỗi gợi ý thông số: ${err?.message || err}`, 500);
     }
+
+    throw new AppError(`Không thể lấy thông số từ Gemini AI: ${lastError || 'Lỗi phản hồi'}`, 500);
   }
 }

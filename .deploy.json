@@ -1,0 +1,8 @@
+{
+  "type": "node-app",
+  "domain": "ngocphieupc.shop",
+  "remote_path": "/var/www/ngocphieupc.shop",
+  "port": 5000,
+  "pm2_name": "np-computer-api",
+  "url": "https://ngocphieupc.shop"
+}

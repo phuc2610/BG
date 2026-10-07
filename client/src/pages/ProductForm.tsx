@@ -87,10 +87,10 @@ export function ProductForm() {
           });
         }
         setShowAllSpecs(true);
-        toast.success('✨ Google Gemini đã tự động điền Thông số & Hãng sản xuất!');
+        toast.success('✨ AI đã tự động điền Thông số & Hãng sản xuất!');
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Lỗi gợi ý thông số từ Gemini');
+      toast.error(err.response?.data?.message || 'Lỗi gợi ý thông số từ AI');
     } finally {
       setSuggestingSpecs(false);
     }
@@ -128,14 +128,25 @@ export function ProductForm() {
   const onSubmit = async (data: MasterProductFormData) => {
     setSaving(true);
     try {
+      const rawImages = isEdit
+        ? images
+        : primaryImageUrl
+        ? [{ url: primaryImageUrl, publicId: `img_${Date.now()}`, isThumbnail: true, order: 0 }]
+        : [];
+
+      // Clean up images array: strip invalid client-side temporary _id (like img_...)
+      const cleanedImages = rawImages.map((img: any) => {
+        const item = { ...img };
+        if (item._id && !/^[0-9a-fA-F]{24}$/.test(String(item._id))) {
+          delete item._id;
+        }
+        return item;
+      });
+
       const payload: any = {
         ...data,
         imageUrl: primaryImageUrl || undefined,
-        images: isEdit
-          ? images
-          : primaryImageUrl
-          ? [{ url: primaryImageUrl, publicId: `img_${Date.now()}`, isThumbnail: true, order: 0 }]
-          : [],
+        images: cleanedImages,
       };
 
       if (isEdit) {
@@ -181,7 +192,12 @@ export function ProductForm() {
     maxFiles: 10,
   });
 
-  const deleteImage = async (imageId: string) => {
+  const deleteImage = async (imageId?: string, url?: string) => {
+    if (!imageId) {
+      setImages((prev) => prev.filter((img) => (url ? img.url !== url : false)));
+      toast.success('Đã xóa ảnh');
+      return;
+    }
     try {
       const res = await api.delete(`/products/${id}/images/${imageId}`);
       setImages(res.data.data.images);
@@ -210,29 +226,31 @@ export function ProductForm() {
   const errorClass = 'text-xs text-red-500 mt-1';
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-24 md:pb-0">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => navigate('/products')}
-          className="p-2 rounded-xl hover:bg-[rgb(var(--accent))] transition-smooth"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isEdit ? 'Chỉnh sửa Mã sản phẩm' : 'Tạo Mã sản phẩm mới (Catalog Master)'}
-          </h1>
-          <p className="text-sm text-[rgb(var(--muted-foreground))]">
-            Định nghĩa Tên linh kiện, Ảnh đại diện, Thương hiệu, Model và Thông số kỹ thuật
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
+            className="p-2 rounded-xl hover:bg-[rgb(var(--accent))] transition-smooth flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+              {isEdit ? 'Chỉnh sửa Mã sản phẩm' : 'Tạo Mã sản phẩm mới (Catalog Master)'}
+            </h1>
+            <p className="hidden sm:block text-sm text-[rgb(var(--muted-foreground))]">
+              Định nghĩa Tên linh kiện, Ảnh đại diện, Thương hiệu, Model và Thông số kỹ thuật
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={handleSubmit(onSubmit)}
           disabled={saving}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth disabled:opacity-50 shadow-lg shadow-blue-500/25"
+          className="hidden md:flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth disabled:opacity-50 shadow-lg shadow-blue-500/25 flex-shrink-0"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'Đang lưu...' : 'Lưu Mã Sản Phẩm'}
@@ -297,7 +315,6 @@ export function ProductForm() {
                   const withoutThumb = prev.map((img) => ({ ...img, isThumbnail: false }));
                   return [
                     {
-                      _id: `img_${Date.now()}`,
                       url,
                       publicId: publicId || `img_${Date.now()}`,
                       isThumbnail: true,
@@ -443,7 +460,7 @@ export function ProductForm() {
         </Section>
 
         {/* Description */}
-        <Section title="Mô tả chi tiết">
+        <Section title="Mô tả chi tiết" collapsible defaultOpen={Boolean(watch('description'))}>
           <textarea
             {...register('description')}
             className={cn(inputClass, 'h-32 resize-none')}
@@ -502,7 +519,7 @@ export function ProductForm() {
                     )}
                     <button
                       type="button"
-                      onClick={() => deleteImage(img._id)}
+                      onClick={() => deleteImage(img._id, img.url)}
                       className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-smooth hover:bg-red-600"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -514,15 +531,51 @@ export function ProductForm() {
           </Section>
         )}
       </form>
+
+      {/* Mobile sticky save bar */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 p-3 bg-[rgb(var(--card))] border-t border-[rgb(var(--border))] shadow-[0_-4px_12px_rgba(0,0,0,0.15)]">
+        <button
+          type="button"
+          onClick={handleSubmit(onSubmit)}
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth disabled:opacity-50 shadow-lg shadow-blue-500/25"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Đang lưu...' : 'Lưu Mã Sản Phẩm'}
+        </button>
+      </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
     <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-6">
-      <h2 className="text-base font-semibold mb-4">{title}</h2>
-      {children}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center justify-between mb-0"
+        >
+          <h2 className="text-base font-semibold">{title}</h2>
+          <span className="text-xs font-semibold text-blue-500">{open ? 'Thu gọn' : '+ Mở rộng'}</span>
+        </button>
+      ) : (
+        <h2 className="text-base font-semibold mb-4">{title}</h2>
+      )}
+      {(!collapsible || open) && <div className={collapsible ? 'mt-4' : ''}>{children}</div>}
     </div>
   );
 }

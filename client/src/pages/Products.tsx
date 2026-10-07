@@ -7,7 +7,7 @@ import type { Product } from '@/types';
 import {
   Search, Plus, Grid3X3, List, Filter, Copy,
   Trash2, Edit, Package, ChevronLeft, ChevronRight,
-  MoreHorizontal, X, Warehouse,
+  MoreHorizontal, X, Warehouse, ImageOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -65,33 +65,35 @@ export function Products() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Danh Mục Mã Sản Phẩm (Master Catalog)</h1>
           <p className="text-sm text-[rgb(var(--muted-foreground))] mt-1">
             {totalProducts} mã sản phẩm định danh linh kiện trong hệ thống
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => navigate('/inventory')}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgb(var(--border))] text-sm font-medium hover:bg-[rgb(var(--accent))] transition-smooth"
           >
             <Warehouse className="w-4 h-4 text-blue-500" />
-            Đến Trang Nhập Kho
+            <span className="hidden sm:inline">Đến Trang Nhập Kho</span>
+            <span className="sm:hidden">Nhập Kho</span>
           </button>
           <button
             onClick={() => navigate('/products/new')}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-medium hover:opacity-90 transition-smooth shadow-lg shadow-blue-500/25"
           >
             <Plus className="w-4 h-4" />
-            Tạo Mã Sản Phẩm Mới
+            <span className="hidden sm:inline">Tạo Mã Sản Phẩm Mới</span>
+            <span className="sm:hidden">Tạo SP</span>
           </button>
         </div>
       </div>
 
       {/* Search & Filters Bar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[rgb(var(--muted-foreground))]" />
           <input
@@ -116,38 +118,55 @@ export function Products() {
           )}
         </div>
 
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border transition-smooth',
-            showFilters
-              ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
-              : 'bg-[rgb(var(--card))] text-[rgb(var(--muted-foreground))] border-[rgb(var(--border))] hover:border-blue-500/30'
-          )}
-        >
-          <Filter className="w-4 h-4" />
-          Bộ lọc
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setFilters({ noImage: !filters.noImage })}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border transition-smooth whitespace-nowrap',
+              filters.noImage
+                ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                : 'bg-[rgb(var(--card))] text-[rgb(var(--muted-foreground))] border-[rgb(var(--border))] hover:border-amber-500/30'
+            )}
+            title="Lọc sản phẩm chưa có ảnh đại diện"
+          >
+            <ImageOff className="w-4 h-4" />
+            <span className="hidden sm:inline">Chưa có ảnh đại diện</span>
+            <span className="sm:hidden">Chưa có ảnh</span>
+          </button>
 
-        <div className="flex items-center border border-[rgb(var(--border))] rounded-xl overflow-hidden">
           <button
-            onClick={() => setViewMode('grid')}
+            onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'p-2.5 transition-smooth',
-              viewMode === 'grid' ? 'bg-blue-500/10 text-blue-500' : 'text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]'
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border transition-smooth whitespace-nowrap',
+              showFilters
+                ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
+                : 'bg-[rgb(var(--card))] text-[rgb(var(--muted-foreground))] border-[rgb(var(--border))] hover:border-blue-500/30'
             )}
           >
-            <Grid3X3 className="w-4 h-4" />
+            <Filter className="w-4 h-4" />
+            Bộ lọc
           </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={cn(
-              'p-2.5 transition-smooth',
-              viewMode === 'list' ? 'bg-blue-500/10 text-blue-500' : 'text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]'
-            )}
-          >
-            <List className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center border border-[rgb(var(--border))] rounded-xl overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                'p-2.5 transition-smooth',
+                viewMode === 'grid' ? 'bg-blue-500/10 text-blue-500' : 'text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]'
+              )}
+            >
+              <Grid3X3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                'p-2.5 transition-smooth',
+                viewMode === 'list' ? 'bg-blue-500/10 text-blue-500' : 'text-[rgb(var(--muted-foreground))] hover:bg-[rgb(var(--accent))]'
+              )}
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -166,7 +185,7 @@ export function Products() {
           </select>
 
           <button
-            onClick={() => setFilters({ category: undefined, brand: undefined })}
+            onClick={() => setFilters({ category: undefined, brand: undefined, noImage: undefined })}
             className="px-3 py-2 rounded-lg text-sm text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] transition-smooth"
           >
             Xóa bộ lọc

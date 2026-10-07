@@ -99,15 +99,15 @@ export function SupplierDetail() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0">
         <button
           onClick={() => navigate('/suppliers')}
-          className="p-2.5 rounded-xl border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] transition-colors"
+          className="p-2.5 rounded-xl border border-[rgb(var(--border))] text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))] hover:bg-[rgb(var(--accent))] transition-colors flex-shrink-0"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-500 font-semibold">
               {supplier.supplierCode}
             </span>
@@ -159,7 +159,7 @@ export function SupplierDetail() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-[rgb(var(--border))] gap-6">
+      <div className="flex items-center gap-4 sm:gap-6 border-b border-[rgb(var(--border))] overflow-x-auto no-scrollbar">
         {[
           { key: 'info', label: 'Thông Tin Liên Hệ' },
           { key: 'purchases', label: `Lịch Sử Nhập Hàng (${purchases.length})` },
@@ -170,7 +170,7 @@ export function SupplierDetail() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`pb-3 text-sm font-semibold transition-colors relative ${
+            className={`pb-3 text-sm font-semibold transition-colors relative whitespace-nowrap flex-shrink-0 ${
               activeTab === tab.key
                 ? 'text-blue-500 border-b-2 border-blue-500'
                 : 'text-[rgb(var(--muted-foreground))] hover:text-[rgb(var(--foreground))]'
@@ -269,13 +269,162 @@ export function SupplierDetail() {
 
         {/* Tab 2: Purchases */}
         {activeTab === 'purchases' && (
-          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-hidden shadow-sm">
+          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-x-auto shadow-sm">
             {purchases.length === 0 ? (
               <div className="p-8 text-center text-sm text-[rgb(var(--muted-foreground))]">
                 Chưa có phiếu nhập hàng nào từ nhà cung cấp này
               </div>
             ) : (
-              <table className="w-full text-left text-sm">
+              <>
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+                {purchases.map((p) => {
+                  const isExpanded = Boolean(expandedPurchases[p._id]);
+                  const totalQty = (p.items || []).reduce((acc, it) => acc + (it.quantity || 1), 0);
+                  return (
+                    <div key={p._id} className={isExpanded ? 'bg-blue-500/5' : ''}>
+                      <div
+                        onClick={() => toggleExpandPurchase(p._id)}
+                        className="p-4 active:bg-[rgb(var(--accent))/30] cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-mono font-semibold text-blue-500 text-xs flex items-center gap-1.5">
+                              <Truck className="w-3.5 h-3.5" /> {p.purchaseCode}
+                            </p>
+                            <p className="text-xs text-[rgb(var(--muted-foreground))] mt-1">{formatDate(p.purchaseDate)}</p>
+                            <p className="text-xs mt-0.5">
+                              <span className="font-semibold text-[rgb(var(--foreground))]">{p.items?.length || 0} SP</span> ({totalQty} cái)
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[10px] px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
+                              p.status === 'PAID'
+                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                : p.status === 'PARTIALLY_PAID'
+                                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                            }`}
+                          >
+                            {p.status === 'PAID' ? 'Đã Thanh Toán' : p.status === 'PARTIALLY_PAID' ? 'Trả 1 Phần' : 'Chưa Trả'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div>
+                            <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Tổng Tiền</p>
+                            <p className="text-xs font-medium">{formatCurrency(p.totalAmount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Đã Trả</p>
+                            <p className="text-xs font-medium text-emerald-500">{formatCurrency(p.paidAmount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Còn Nợ</p>
+                            <p className="text-xs font-semibold text-amber-500">{formatCurrency(p.remainingAmount)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-1 mt-3 text-xs font-semibold text-blue-500">
+                          <span>{isExpanded ? 'Thu gọn' : 'Xem chi tiết mặt hàng & thanh toán'}</span>
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 space-y-3">
+                          <div className="p-3 rounded-xl bg-[rgb(var(--muted))]/30 border border-[rgb(var(--border))] space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-blue-400">Mặt Hàng Trong Phiếu</span>
+                              <Link
+                                to={`/purchases?search=${p.purchaseCode}`}
+                                className="text-[11px] font-semibold text-blue-500 hover:underline inline-flex items-center gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Mở phiếu <ExternalLink className="w-3 h-3" />
+                              </Link>
+                            </div>
+                            {(p.items || []).map((it, itIdx) => (
+                              <div key={itIdx} className="p-2.5 rounded-lg bg-[rgb(var(--card))] border border-[rgb(var(--border))] text-xs space-y-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium truncate">{it.productName}</span>
+                                  <span className="font-bold flex-shrink-0">{formatCurrency(it.total)}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-[rgb(var(--muted-foreground))]">
+                                  <span className="font-mono text-blue-500">{it.productCode}</span>
+                                  <span>SL: {it.quantity}</span>
+                                  <span>Đơn giá: {formatCurrency(it.costPrice)}</span>
+                                </div>
+                                {it.serialDetails && it.serialDetails.length > 0 && (
+                                  <div className="space-y-1 pt-1">
+                                    {it.serialDetails.map((snUnit: any, snIdx: number) => {
+                                      const isSold = snUnit.status === 'SOLD';
+                                      const isReserved = snUnit.status === 'RESERVED';
+                                      return (
+                                        <div key={snIdx} className="flex items-center gap-1.5 flex-wrap text-[10px] p-1.5 rounded-lg bg-[rgb(var(--background))] border border-[rgb(var(--border))]">
+                                          <span className="font-mono font-bold text-emerald-400">S/N: {snUnit.serialNumber}</span>
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                              isSold
+                                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                                : isReserved
+                                                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                                : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                            }`}
+                                          >
+                                            {isSold ? 'Đã bán' : isReserved ? 'Đang giữ' : 'Còn kho'}
+                                          </span>
+                                          {snUnit.customerInfo && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); setSelectedCustomerInfo(snUnit.customerInfo); }}
+                                              className="text-purple-400 hover:underline"
+                                            >
+                                              KH: {snUnit.customerInfo.customerName}
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-[rgb(var(--muted))]/30 border border-[rgb(var(--border))] space-y-2">
+                            <span className="text-[11px] font-bold text-amber-500">Các Đợt Thanh Toán</span>
+                            {p.payments && p.payments.length > 0 ? (
+                              p.payments.map((pm: any, pmIdx: number) => (
+                                <div key={pmIdx} className="flex items-center justify-between text-xs p-2 rounded-lg bg-[rgb(var(--card))] border border-[rgb(var(--border))]">
+                                  <div className="min-w-0">
+                                    <p className="font-mono font-semibold text-blue-500 text-[11px]">{pm.paymentCode}</p>
+                                    <p className="text-[10px] text-[rgb(var(--muted-foreground))]">{formatDate(pm.paymentDate || pm.createdAt)} • {pm.paymentMethod}</p>
+                                  </div>
+                                  <span className="font-bold text-emerald-500 flex-shrink-0">{formatCurrency(pm.amount)}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-[rgb(var(--muted-foreground))] italic">Chưa có đợt thanh toán nào</p>
+                            )}
+                            {p.remainingAmount > 0 && (
+                              <Link
+                                to={`/purchases?search=${p.purchaseCode}`}
+                                className="block text-center px-3 py-2 rounded-lg font-semibold bg-emerald-600 text-white hover:bg-emerald-500 text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                + Trả Nợ Phiếu Này
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <table className="hidden md:table w-full text-left text-sm">
                 <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                   <tr>
                     <th className="px-5 py-3.5">Mã Phiếu</th>
@@ -582,19 +731,45 @@ export function SupplierDetail() {
                   })}
                 </tbody>
               </table>
+              </>
             )}
           </div>
         )}
 
         {/* Tab 3: Payments */}
         {activeTab === 'payments' && (
-          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-hidden shadow-sm">
+          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-x-auto shadow-sm">
             {payments.length === 0 ? (
               <div className="p-8 text-center text-sm text-[rgb(var(--muted-foreground))]">
                 Chưa có lịch sử thanh toán nào cho nhà cung cấp này
               </div>
             ) : (
-              <table className="w-full text-left text-sm">
+              <>
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+                {payments.map((pm: any, idx: number) => (
+                  <div key={idx} className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono font-semibold text-blue-500 text-xs">{pm.paymentCode}</p>
+                        <p className="text-[10px] text-[rgb(var(--muted-foreground))] mt-0.5">{formatDate(pm.paymentDate || pm.createdAt)}</p>
+                      </div>
+                      <span className="font-bold text-emerald-500 text-sm flex-shrink-0">{formatCurrency(pm.amount)}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs">
+                      <span className="text-[rgb(var(--muted-foreground))]">{pm.paymentMethod} {pm.bankName ? `(${pm.bankName})` : ''}</span>
+                      {pm.purchaseCode && (
+                        <Link to={`/purchases?search=${pm.purchaseCode}`} className="font-mono text-blue-500 hover:underline">
+                          {pm.purchaseCode}
+                        </Link>
+                      )}
+                    </div>
+                    {pm.note && <p className="text-[11px] text-[rgb(var(--muted-foreground))] mt-1 italic">{pm.note}</p>}
+                  </div>
+                ))}
+              </div>
+
+              <table className="hidden md:table w-full text-left text-sm">
                 <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                   <tr>
                     <th className="px-5 py-3.5">Mã Giao Dịch</th>
@@ -628,6 +803,7 @@ export function SupplierDetail() {
                   ))}
                 </tbody>
               </table>
+              </>
             )}
           </div>
         )}
@@ -731,13 +907,94 @@ export function SupplierDetail() {
 
         {/* Tab 5: Products */}
         {activeTab === 'products' && (
-          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-hidden shadow-sm">
+          <div className="rounded-2xl bg-[rgb(var(--card))] border border-[rgb(var(--border))] overflow-x-auto shadow-sm">
             {purchasedUnits.length === 0 ? (
               <div className="p-8 text-center text-sm text-[rgb(var(--muted-foreground))]">
                 Chưa có thiết bị / serial nào được nhập từ nhà cung cấp này
               </div>
             ) : (
-              <table className="w-full text-left text-sm">
+              <>
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-[rgb(var(--border))]">
+                {purchasedUnits.map((u) => {
+                  const isSold = u.status === 'SOLD';
+                  const isReserved = u.status === 'RESERVED';
+                  return (
+                    <div key={u._id} className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-mono font-bold text-xs text-blue-500">
+                            {u.serialNumber || <span className="text-[rgb(var(--muted-foreground))] italic">Không có S/N</span>}
+                          </p>
+                          <p className="font-semibold text-xs mt-1 truncate">{u.productName}</p>
+                          <p className="text-[11px] font-mono text-[rgb(var(--muted-foreground))]">{u.productCode}</p>
+                        </div>
+                        <span
+                          className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                            isSold
+                              ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                              : isReserved
+                              ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                              : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                          }`}
+                        >
+                          {isSold ? 'Đã bán' : isReserved ? 'Đang giữ' : 'Còn hàng'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Phiếu Nhập</p>
+                          {u.purchaseCode ? (
+                            <Link to={`/purchases?search=${u.purchaseCode}`} className="font-mono text-blue-400 hover:underline">
+                              {u.purchaseCode}
+                            </Link>
+                          ) : '—'}
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Ngày Nhập</p>
+                          <p>{formatDate(u.purchaseDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">Giá Nhập</p>
+                          <p className="font-medium">{formatCurrency(u.purchasePrice)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[rgb(var(--muted-foreground))] uppercase">BH NCC</p>
+                          <p>{u.supplierWarrantyMonths} tháng</p>
+                        </div>
+                      </div>
+
+                      {u.customerInfo && (
+                        <div className="flex items-center flex-wrap gap-2 mt-3 pt-3 border-t border-[rgb(var(--border))]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomerInfo(u.customerInfo || null)}
+                            className="text-[11px] font-semibold text-purple-400 hover:underline inline-flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20"
+                          >
+                            <User className="w-3 h-3" />
+                            {u.customerInfo.customerName}
+                          </button>
+                          {(u.customerInfo.invoiceCode || u.soldInvoiceCode || u.reservedByInvoiceCode) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(`/invoices/${u.customerInfo?.invoiceId || u.soldInvoiceId || u.reservedByInvoiceId}`)
+                              }
+                              className="text-[10px] font-mono font-bold text-blue-400 hover:underline inline-flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20"
+                            >
+                              <Receipt className="w-3 h-3" />
+                              HĐ: {u.customerInfo.invoiceCode || u.soldInvoiceCode || u.reservedByInvoiceCode}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <table className="hidden md:table w-full text-left text-sm">
                 <thead className="bg-[rgb(var(--muted))/50] text-[rgb(var(--muted-foreground))] text-xs font-semibold uppercase border-b border-[rgb(var(--border))]">
                   <tr>
                     <th className="px-5 py-3.5">Serial Number</th>
@@ -853,6 +1110,7 @@ export function SupplierDetail() {
                   })}
                 </tbody>
               </table>
+              </>
             )}
           </div>
         )}
